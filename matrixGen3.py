@@ -2,7 +2,8 @@
 
 n = 0
 data = []
-
+cores = []
+trivials = []
 
 #sets up matrix with all permutations
 def populate():
@@ -56,28 +57,30 @@ def permutate(matrix):
                     while (matrix[i][j][1:]+matrix[i][j][:1]) not in subMatrix[i][b]:
                         subMatrix[i][b].append(matrix[i][j][k:] + matrix[i][j][:k])
                         k-=1
-        '''
-        def sortKey(e):
-            return int((e))
-        
-        for j in range(len(subMatrix[i])):
-            subMatrix[i][j].sort(key = sortKey, reverse=True)
-        '''
     data.append(subMatrix)
-
-    '''
-    for i in range(len(subMatrix)):
-        for j in range(len(subMatrix[i])):
-            print(str(i) + " " + str(j) + " " + str(subMatrix[i][j]))
-    '''
-
 
 populate()
 
 
 for n in range(1, 10):
-    print("n: " + str(n))
+    # print("n: " + str(n))
     populate()
 
+'''
     for j in range(len(data[n])):
         print(data[n][j])
+'''
+
+def getCore():
+    global cores
+    global trivials
+    for i in range(len(data)):
+        for j in range(len(data[i])):
+            for k in range(len(data[i][j])):
+                if len(data[i][j][k])>1:
+                    cores.append(data[i][j][k][1])
+                elif i==j==k==0:
+                    break
+                else:
+                    trivials.append(data[i][j][k][0])
+getCore()
