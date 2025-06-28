@@ -211,9 +211,15 @@ class ActiveRhythm(pygame.sprite.Sprite):
         self.binary = binary
         self.image = Rhythm.rhythm_surface(binary)
         self.rect = self.image.get_rect(center = pos)
+        self.move_bool = False
     
-    def update(self, rel: tuple) -> None:
+    def permutate(self) -> None:
+        self.binary = self.binary[1:]+self.binary[0]
+        self.image = Rhythm.rhythm_surface(self.binary)
+
+    def move(self, rel: tuple) -> None:
         self.rect = self.rect.move((rel[0], rel[1]))
+        self.move_bool = True
 
 activeRhythms = pygame.sprite.Group()
 pickedUpRhythm = pygame.sprite.GroupSingle()
@@ -262,9 +268,11 @@ pygame.display.update()
 while True:
     
     if len(pickedUpRhythm.sprites()):
-            pickedUpRhythm.sprite.update(pygame.mouse.get_rel())
-            Display.blit(workingDisplay,(0,0))
-            update_all()    
+            rel = pygame.mouse.get_rel()
+            if rel[0]+rel[1]:
+                pickedUpRhythm.sprite.move(rel)
+                Display.blit(workingDisplay,(0,0))
+                update_all()
 
     for event in pygame.event.get():
         if event.type == QUIT:
@@ -318,6 +326,14 @@ while True:
                         pickedUpRhythm.add(new_rhythm)
                         update_all()
 
+            if len(activeRhythms.sprites()):
+                active_rhy_list = activeRhythms.sprites()
+                for x in range(0, len(active_rhy_list)):
+                    if active_rhy_list[x].rect.collidepoint(mouse_pos):
+                        pygame.mouse.get_rel()
+                        pickedUpRhythm.add(active_rhy_list[x])
+                        update_all()
+
         if event.type == MOUSEBUTTONUP:
 
             # unclicking up/down buttons
@@ -330,6 +346,10 @@ while True:
                 Display.blit(workingDisplay,(0,0))
                 if pickedUpRhythm.sprite.rect.centerx < disp_width/3 or pickedUpRhythm.sprite.rect.top < 100:
                     pickedUpRhythm.sprite.kill()
+                elif pickedUpRhythm.sprite.move_bool == False:
+                    pickedUpRhythm.sprite.permutate()
+                else:
+                    pickedUpRhythm.sprite.move_bool = False
                 pickedUpRhythm.empty()
                 update_all()
                     
