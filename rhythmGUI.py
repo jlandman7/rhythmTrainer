@@ -67,7 +67,7 @@ pygame.draw.line(workingDisplay, BLACK,(0,70),(disp_width,70))
 def sandbox_init() -> None:
     global mode
     mode = 'sandbox'
-    
+
     # toolkit/workspace  background/text/lines  onto workingDisplay
     toolkit_surf = pygame.Surface((disp_width/3,Display.get_height()-71))
     toolkit_surf.fill((60,60,60))
@@ -83,14 +83,33 @@ def sandbox_init() -> None:
     workspace_text = headerFont.render(' Workspace ',True, (120, 30, 180))
     workspace_rect = workspace_text.get_rect(center = (2*disp_width/3+1,85))
     workingDisplay.blit(workspace_text,workspace_rect)
-    pygame.draw.line(workingDisplay, BLACK, (disp_width/3,70),(disp_width/3,disp_height),2)
+    pygame.draw.line(workingDisplay, BLACK, (disp_width/3,70),
+                     (disp_width/3,disp_height),2)
     pygame.draw.line(workingDisplay, BLACK, (0,100), (disp_width,100))
 
-    pygame.draw.ellipse(workingDisplay,(50,150,50),(sandboxRect.left-5, sandboxRect.top-5,
-                                                         sandboxRect.width+10, sandboxRect.height+10))
-    
+    pygame.draw.ellipse(workingDisplay,(50,150,50),
+                        (sandboxRect.left-5, sandboxRect.top-5, 
+                         sandboxRect.width+10, sandboxRect.height+10))
     workingDisplay.blit(sandboxText, sandboxRect)
-    sandboxBackdrop.blit(workingDisplay, (0,0))
+    
+    # draw lines in workspace 
+    # (spaced by 22 pixels (rhydotlen) in x, 43 (rhy height) in y)
+    line_x = disp_width / 3
+    line_y = 100
+    while line_y < disp_height:
+        pygame.draw.line(workingDisplay, BLACK, (disp_width / 3, line_y),
+                         (disp_width,line_y))
+        line_y += 44
+    pygame.draw.rect(workingDisplay, BLACK, ((disp_width / 3, line_y - 44) ,
+                                             (disp_width * 2 / 3, disp_height - (line_y - 44))))
+    while line_x < disp_width:
+        pygame.draw.line(workingDisplay, BLACK, (line_x, 100), 
+                         (line_x, disp_height))
+        line_x += 22
+    pygame.draw.rect(workingDisplay, BLACK, ((line_x-22,100), 
+                                             (disp_width-(line_x-23), disp_height-100)))
+
+    # sandboxBackdrop.blit(workingDisplay, (0,0))
     
     # toolkit buttons and page counter
     global pageCounter
@@ -211,6 +230,8 @@ class ActiveRhythm(pygame.sprite.Sprite):
         self.binary = binary
         self.image = Rhythm.rhythm_surface(binary)
         self.rect = self.image.get_rect(center = pos)
+        self.grid_pos = (round((self.rect.left - (disp_width / 3)) / 22) , 
+                         round((self.rect.top - 100) / 44))
         self.move_bool = False
     
     def permutate(self) -> None:
@@ -220,6 +241,14 @@ class ActiveRhythm(pygame.sprite.Sprite):
     def move(self, rel: tuple) -> None:
         self.rect = self.rect.move((rel[0], rel[1]))
         self.move_bool = True
+
+    def snap(self) -> None:
+        pos = self.rect.topleft
+        snap_by = (((pos[0] - int(disp_width / 3)) %22, 
+                    (pos[1] - 100) % 44))
+        self.rect = self.rect.move((-snap_by[0]+1, -snap_by[1]+1))
+        self.grid_pos = (round((self.rect.left - (disp_width / 3)) / 22) , 
+                         round((self.rect.top - 100) / 44))
 
 activeRhythms = pygame.sprite.Group()
 pickedUpRhythm = pygame.sprite.GroupSingle()
@@ -310,7 +339,6 @@ while True:
                 buttons_list = buttons.sprites()
                 for x in range(0, len(buttons_list)):
                     if buttons_list[x].rect.collidepoint(mouse_pos):
-                        print(f'collision with {buttons_list[x].type}'.format())
                         Display.blit(workingDisplay,(0,0))
                         buttons_list[x].click()
                         update_all()
@@ -350,6 +378,7 @@ while True:
                     pickedUpRhythm.sprite.permutate()
                 else:
                     pickedUpRhythm.sprite.move_bool = False
+                    pickedUpRhythm.sprite.snap()
                 pickedUpRhythm.empty()
                 update_all()
                     
