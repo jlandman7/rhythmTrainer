@@ -18,6 +18,7 @@ sandboxBackdrop = pygame.Surface((disp_width,disp_height))
 
 # vars init
 mode = 0
+updateNeeded = False
 
 rhyDotLen = 22
 rhythmIterator = 0
@@ -26,6 +27,10 @@ ghostIterator = [0]
     # convention for button states   ->   up/core = 0, down/trivial = 1
 upDownClick = False
 lastUpDownClicked = 0
+playbackClick = False
+lastPlaybackClicked = 0
+
+
 ctState = 0
 coresAndTrivials = [cores,trivials]
 
@@ -34,6 +39,7 @@ BLACK = (0,0,0)
 WHITE = (255,255,255)
 AQUA = (0,200,155)
 ORANGE = (180,70,30)
+WORKSPACEPURPLE = (120, 30, 180)
 
 # Fonts init
 homeFont = pygame.font.SysFont('Serif', 48)
@@ -74,13 +80,13 @@ def sandbox_init() -> None:
     toolkit_rect = toolkit_surf.get_rect(topleft = (0,70))
     workingDisplay.blit(toolkit_surf, toolkit_rect)
     toolkit_text = headerFont.render(' Toolkit ', True, ORANGE)
-    toolkit_text_rect = toolkit_text.get_rect(center = (disp_width/6,85))
+    toolkit_text_rect = toolkit_text.get_rect(center = (disp_width/6,86))
     workingDisplay.blit(toolkit_text,toolkit_text_rect)
     workspace_surf = pygame.Surface((disp_width*2/3-2,disp_height-71))
     workspace_surf.fill((220,220,220))
     workspace_rect = workspace_surf.get_rect(topleft = (disp_width/3+2,70))
     workingDisplay.blit(workspace_surf, workspace_rect)
-    workspace_text = headerFont.render(' Workspace ',True, (120, 30, 180))
+    workspace_text = headerFont.render(' Workspace ',True, WORKSPACEPURPLE)
     workspace_rect = workspace_text.get_rect(center = (2*disp_width/3+1,85))
     workingDisplay.blit(workspace_text,workspace_rect)
     pygame.draw.line(workingDisplay, BLACK, (disp_width/3,70),
@@ -123,11 +129,24 @@ def sandbox_init() -> None:
     counters.add(Counter((disp_width/3-74, 76), 1))
     
     # workspace population
-    counters.add(Counter((disp_width/3+230, 74), 60))
-    draggers.add(Dragger(['images/dragger_0.png', 'images/dragger_1.png'],
-                         (disp_width / 3 + 270, 73), 'metronome'))
+    counters.add(Counter((disp_width*2/3 - 280, 74), 60))
+    draggers.add(Dragger((disp_width*2/3 - 242, 73), 'metronome'))
+    counters.add(Counter((disp_width*2/3 - 130, 74), 1))
+    draggers.add(Dragger((disp_width*2/3 - 104, 73), 'subdivision'))
+    bpm_text = miniFont.render('Metronome (bpm):', True, WORKSPACEPURPLE)
+    bpm_text_rect = bpm_text.get_rect(midleft = (disp_width*2/3 - 405, 86))
+    subdiv_text = miniFont.render('Subdivision:', True, WORKSPACEPURPLE)
+    subdiv_text_rect = subdiv_text.get_rect(midleft = (disp_width*2/3 - 211, 86))
+    workingDisplay.blit(bpm_text, bpm_text_rect)
+    workingDisplay.blit(subdiv_text, subdiv_text_rect)
+
+
     buttons.add(Button(['images/play_button_unpressed.png', 'images/play_button_pressed.png'],
-                       (disp_width - 300, 74), ('play', 0)))
+                       (disp_width - 220, 72), ('playback', 4)))
+    buttons.add(Button(['images/pause_button_unpressed.png', 'images/pause_button_pressed.png'],
+                       (disp_width - 190, 72), ('playback', 5)))
+    buttons.add(Button(['images/stop_button_unpressed.png', 'images/stop_button_pressed.png'],
+                       (disp_width - 160, 72), ('playback', 6)))
 
     Display.blit(workingDisplay,(0,0))
     
@@ -140,7 +159,7 @@ class Button(pygame.sprite.Sprite):
         self.type = type
         self.graphics = graphics
 
-        if self.type[0] == 'UpDown' or self.type[0] == 'play':
+        if self.type[0] == 'UpDown' or self.type[0] == 'playback':
             self.status = 0
         elif self.type[0] == 'CT':
             self.status = ctState
@@ -172,9 +191,12 @@ class Button(pygame.sprite.Sprite):
                 global ghostIterator
                 ghostIterator = [0]
         
-        elif self.type[0] == 'play':
+        elif self.type[0] == 'playback':
             if self.status == 0:
+                global playbackClick, lastPlaybackClicked
                 self.status = 1
+                playbackClick = True
+                lastPlaybackClicked = self.type[1]
             else:
                 self.status = 0
 
@@ -187,7 +209,7 @@ class Button(pygame.sprite.Sprite):
                 self.image = pygame.image.load(self.graphics[0]).convert_alpha()
         elif self.type[0] == 'UpDown':
             self.image = pygame.image.load(self.graphics[self.status]).convert_alpha()
-        elif self.type[0] == 'play':
+        elif self.type[0] == 'playback':
             self.image = pygame.image.load(self.graphics[self.status]).convert_alpha()
 buttons = pygame.sprite.Group()
 
@@ -270,8 +292,9 @@ activeRhythms = pygame.sprite.Group()
 pickedUpRhythm = pygame.sprite.GroupSingle()
 
 class Dragger(pygame.sprite.Sprite):
-    def __init__(self, graphics: list, pos: tuple, type: str) -> None:
+    def __init__(self,  pos: tuple, type: str) -> None:
         pygame.sprite.Sprite.__init__(self)
+        graphics = ['images/dragger_0.png', 'images/dragger_1.png']
         self.graphics = [pygame.image.load(x).convert() for x in graphics]
         self.status = 0
         self.image = self.graphics[0]
@@ -288,8 +311,7 @@ class Dragger(pygame.sprite.Sprite):
         if dir_dragged == 'up' and counters.sprites()[1].num < 300:
             counters.sprites()[1].num += 1
         elif dir_dragged == 'down' and counters.sprites()[1].num > 1:
-            counters.sprites()[1].num -= 1
-                
+            counters.sprites()[1].num -= 1  
 draggers = pygame.sprite.Group()      
 clickedDragger = pygame.sprite.GroupSingle()  
 
@@ -428,9 +450,13 @@ while True:
 
         if event.type == MOUSEBUTTONUP:
 
-            # unclicking up/down buttons
+            # unclicking buttons
             if upDownClick:
                 buttons.sprites()[lastUpDownClicked].click()
+                buttons.update()
+                buttons.draw(Display)
+            if playbackClick:
+                buttons.sprites()[lastPlaybackClicked].click()
                 buttons.update()
                 buttons.draw(Display)
 
@@ -452,8 +478,6 @@ while True:
             if len(clickedDragger.sprites()):
                 Display.blit(workingDisplay, (0,0))
                 clickedDragger.empty()
-                update_all()
-
-                    
-                    
+                update_all()             
+   
     pygame.display.update()
