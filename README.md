@@ -1,1 +1,4 @@
 # rhythmTrainer
+## smaller
+* bullet
+- bullet

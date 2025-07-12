@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-import pygame, sys, time
+import pygame, sys
 from pygame.locals import *
 import matrixGen3
 from matrixGen3 import data, cores, trivials
@@ -10,29 +10,28 @@ disp_width = 1300
 disp_height = 800
 Display = pygame.display.set_mode((disp_width, disp_height),0,32)
 pygame.display.set_caption('The Rhythm Trainer')
-
 workingDisplay = pygame.Surface((disp_width,disp_height))
 workingDisplay.fill((120,130,130))
-
 sandboxBackdrop = pygame.Surface((disp_width,disp_height))
 
 # vars init
 mode = 0
 updateNeeded = False
-
 rhyDotLen = 22
 rhythmIterator = 0
 ghostIterator = [0]
-
-    # convention for button states   ->   up/core = 0, down/trivial = 1
-upDownClick = False
+upDownClick = False  #up/core = 0, down/trivial = 1
 lastUpDownClicked = 0
 playbackClick = False
 lastPlaybackClicked = 0
-
-
 ctState = 0
 coresAndTrivials = [cores,trivials]
+clock = pygame.time.Clock()
+metronome = False
+loadedSound = pygame.mixer.Sound('sounds/bongo4_cymatics.wav')
+loadedSound2 = pygame.mixer.Sound('sounds/shaker6_cymatics.wav')
+elapsed = 0
+elapsed2 = 0
 
 # colors init
 BLACK = (0,0,0)
@@ -70,96 +69,16 @@ workingDisplay.blit(settingsText, settingsRect)
 
 pygame.draw.line(workingDisplay, BLACK,(0,70),(disp_width,70))
 
-def sandbox_init() -> None:
-    global mode
-    mode = 'sandbox'
-
-    # toolkit/workspace  background/text/lines  onto workingDisplay
-    toolkit_surf = pygame.Surface((disp_width/3,Display.get_height()-71))
-    toolkit_surf.fill((60,60,60))
-    toolkit_rect = toolkit_surf.get_rect(topleft = (0,70))
-    workingDisplay.blit(toolkit_surf, toolkit_rect)
-    toolkit_text = headerFont.render(' Toolkit ', True, ORANGE)
-    toolkit_text_rect = toolkit_text.get_rect(center = (disp_width/6,86))
-    workingDisplay.blit(toolkit_text,toolkit_text_rect)
-    workspace_surf = pygame.Surface((disp_width*2/3-2,disp_height-71))
-    workspace_surf.fill((220,220,220))
-    workspace_rect = workspace_surf.get_rect(topleft = (disp_width/3+2,70))
-    workingDisplay.blit(workspace_surf, workspace_rect)
-    workspace_text = headerFont.render(' Workspace ',True, WORKSPACEPURPLE)
-    workspace_rect = workspace_text.get_rect(center = (2*disp_width/3+1,85))
-    workingDisplay.blit(workspace_text,workspace_rect)
-    pygame.draw.line(workingDisplay, BLACK, (disp_width/3,70),
-                     (disp_width/3,disp_height),2)
-    pygame.draw.line(workingDisplay, BLACK, (0,100), (disp_width,100))
-
-    pygame.draw.ellipse(workingDisplay,(50,150,50),
-                        (sandboxRect.left-5, sandboxRect.top-5, 
-                         sandboxRect.width+10, sandboxRect.height+10))
-    workingDisplay.blit(sandboxText, sandboxRect)
-    
-    # draw lines in workspace 
-    # (spaced by 22 pixels (rhydotlen) in x, 43 (rhy height) in y)
-    line_x = disp_width / 3 + 1
-    line_y = 100
-    while line_y < disp_height:
-        pygame.draw.line(workingDisplay, BLACK, (disp_width / 3, line_y),
-                         (disp_width,line_y))
-        line_y += 44
-    pygame.draw.rect(workingDisplay, BLACK, ((disp_width / 3, line_y - 44) ,
-                                             (disp_width * 2 / 3, disp_height - (line_y - 44))))
-    while line_x < disp_width:
-        pygame.draw.line(workingDisplay, BLACK, (line_x, 100), 
-                         (line_x, disp_height))
-        line_x += 22
-    pygame.draw.rect(workingDisplay, BLACK, ((line_x-22,100), 
-                                             (disp_width-(line_x-23), disp_height-100)))
-
-    # sandboxBackdrop.blit(workingDisplay, (0,0))
-    
-    # toolkit population
-    buttons.add(Button(['images/up_button_unpressed.png', 'images/up_button_pressed.png'],
-                                   (disp_width/3-100,75), ('UpDown', 0)))
-    buttons.add(Button(['images/down_button_unpressed.png', 'images/down_button_pressed.png'],
-                                   (disp_width/3-50,75), ('UpDown', 1)))
-    buttons.add(Button(['images/core_button_unpressed.png', 'images/core_button_pressed.png'],
-                        (40,75), ('CT', 0)))
-    buttons.add(Button(['images/trivial_button_unpressed.png', 'images/trivial_button_pressed.png'],
-                        (84,75), ('CT', 1)))
-    counters.add(Counter((disp_width/3-74, 76), 1))
-    
-    # workspace population
-    counters.add(Counter((disp_width*2/3 - 280, 74), 60))
-    draggers.add(Dragger((disp_width*2/3 - 242, 73), 'metronome'))
-    counters.add(Counter((disp_width*2/3 - 130, 74), 1))
-    draggers.add(Dragger((disp_width*2/3 - 104, 73), 'subdivision'))
-    bpm_text = miniFont.render('Metronome (bpm):', True, WORKSPACEPURPLE)
-    bpm_text_rect = bpm_text.get_rect(midleft = (disp_width*2/3 - 405, 86))
-    subdiv_text = miniFont.render('Subdivision:', True, WORKSPACEPURPLE)
-    subdiv_text_rect = subdiv_text.get_rect(midleft = (disp_width*2/3 - 211, 86))
-    workingDisplay.blit(bpm_text, bpm_text_rect)
-    workingDisplay.blit(subdiv_text, subdiv_text_rect)
-
-
-    buttons.add(Button(['images/play_button_unpressed.png', 'images/play_button_pressed.png'],
-                       (disp_width - 220, 72), ('playback', 4)))
-    buttons.add(Button(['images/pause_button_unpressed.png', 'images/pause_button_pressed.png'],
-                       (disp_width - 190, 72), ('playback', 5)))
-    buttons.add(Button(['images/stop_button_unpressed.png', 'images/stop_button_pressed.png'],
-                       (disp_width - 160, 72), ('playback', 6)))
-
-    Display.blit(workingDisplay,(0,0))
-    
-    update_all()
-
 # classes and groups
+sprites = pygame.sprite.Group()
+
 class Button(pygame.sprite.Sprite):
     def __init__(self, graphics: list, pos: tuple, type: tuple) -> None: # graphics: [unpressed, pressed]
         pygame.sprite.Sprite.__init__(self)
         self.type = type
         self.graphics = graphics
 
-        if self.type[0] == 'UpDown' or self.type[0] == 'playback':
+        if self.type[0] == 'UpDown' or self.type[0] == 'playback' or self.type[0] == 'onOff':
             self.status = 0
         elif self.type[0] == 'CT':
             self.status = ctState
@@ -200,6 +119,18 @@ class Button(pygame.sprite.Sprite):
             else:
                 self.status = 0
 
+            global metronome
+            if self.type[1] == 0 and metronome == False:
+                metronome = True
+            if self.type[1] and metronome:
+                metronome = False
+
+        elif self.type[0] == 'onOff':
+            if self.status == 0:
+                self.status = 1
+            else:
+                self.status = 0
+
     def update(self) -> None:
         if self.type[0] == 'CT':
             self.status = ctState
@@ -207,11 +138,10 @@ class Button(pygame.sprite.Sprite):
                 self.image = pygame.image.load(self.graphics[1]).convert_alpha()
             elif self.type[1] != self.status:
                 self.image = pygame.image.load(self.graphics[0]).convert_alpha()
-        elif self.type[0] == 'UpDown':
-            self.image = pygame.image.load(self.graphics[self.status]).convert_alpha()
-        elif self.type[0] == 'playback':
+        elif self.type[0] == 'UpDown' or self.type[0] == 'playback' or self.type[0] == 'onOff':
             self.image = pygame.image.load(self.graphics[self.status]).convert_alpha()
 buttons = pygame.sprite.Group()
+playbackButtons = pygame.sprite.Group()
 
 class Counter(pygame.sprite.Sprite):
     def __init__(self, pos: tuple, default_num: int) -> None:
@@ -302,29 +232,53 @@ class Dragger(pygame.sprite.Sprite):
         self.pos = pos
         self.rect = self.image.get_rect(topleft = pos)
 
-    def update(self, dir_dragged: str) -> None:
+    def animate(self) -> None:
         if self.status == 0: 
             self.status = 1
         else: 
             self.status = 0
         self.image = self.graphics[self.status]
-        if dir_dragged == 'up' and counters.sprites()[1].num < 300:
-            counters.sprites()[1].num += 1
-        elif dir_dragged == 'down' and counters.sprites()[1].num > 1:
-            counters.sprites()[1].num -= 1  
+
+    def update(self, dir_dragged: str = 'none') -> None:
+        if self.type == 'metronome':
+            if dir_dragged == 'up' and counters.sprites()[1].num < 300:
+                counters.sprites()[1].num += 1
+            elif dir_dragged == 'down' and counters.sprites()[1].num > 1:
+                counters.sprites()[1].num -= 1  
+        elif self.type == 'subdivision':
+            if dir_dragged == 'up' and counters.sprites()[2].num < 9:
+                counters.sprites()[2].num += 1
+            elif dir_dragged == 'down' and counters.sprites()[2].num > 1:
+                counters.sprites()[2].num -= 1
+        if dir_dragged != 'none':
+            self.animate()
 draggers = pygame.sprite.Group()      
 clickedDragger = pygame.sprite.GroupSingle()  
 
-class Marker(pygame.sprite.Sprite):
-    def __init__(self, graphics: list, orientation: str) -> None:
-        self.graphics = graphics
-        self.orientation = orientation
-markers = pygame.sprite.Group()
+class Kernel(pygame.sprite.Sprite):
+    def __init__(self, LR: str) -> None:
+        pygame.sprite.Sprite.__init__(self)
+        self.LR = LR
+        if LR == 'left':
+            self.image = pygame.image.load('images/left_kernel.png')
+            self.rect = self.image.get_rect(midleft = (disp_width/3 - 2, 103))
+        elif LR == 'right':
+            self.image = pygame.image.load('images/right_kernel.png')
+            self.rect = self.image.get_rect(midleft = (disp_width/3 + 20, 103))
+    
+    def move(self, rel: int) -> None:
+        self.rect = self.rect.move(rel, 0)
+    
+    def snap(self) -> None:
+        if (self.rect.left - disp_width/3 - 2) % 22:
+            self.rect = self.rect.move(-(self.rect.left - disp_width/3 - 2) % 22 - 4, 0)
+kernels = pygame.sprite.Group()
+clickedKernel = pygame.sprite.GroupSingle()
 
 # global functions
-
 def update_rhythms(ctState, rhythmPage) -> None:
-    rhythms.empty()       
+    for x in rhythms:
+        x.kill()      
     rowCount = 0
     global ghostIterator
     rhythmIterator = (ghostIterator[rhythmPage-1] - 1)
@@ -348,37 +302,138 @@ def update_rhythms(ctState, rhythmPage) -> None:
         rowCount += 1
     # record last rhythm to start off with next time
     ghostIterator.append(rhythmIterator)
+    for x in rhythms.sprites():
+        sprites.add(x)
 
 def update_all() -> None:
-    buttons.update()
-    counters.update()
+    Display.blit(workingDisplay, (0,0))
     update_rhythms(ctState, counters.sprites()[0].num)
+    sprites.update()
+    sprites.draw(Display)
 
-    buttons.draw(Display)
-    counters.draw(Display)
-    rhythms.draw(Display)
-    activeRhythms.draw(Display)
-    draggers.draw(Display)
+def sprites_clicked(mouse_pos: tuple) -> None:
+    try:
+        for x in range(0, len(sprites.sprites())):
+            spr = sprites.sprites()
+            if spr[x].rect.collidepoint(mouse_pos):
+                Display.blit(workingDisplay,(0,0))
+                if spr[x] in buttons:
+                    spr[x].click()
+                elif spr[x] in playbackButtons:
+                    spr[x].click()
+                elif spr[x] in rhythms:
+                    pygame.mouse.get_rel()
+                    new_rhythm = ActiveRhythm(spr[x].binary, (mouse_pos))
+                    activeRhythms.add(new_rhythm)
+                    pickedUpRhythm.add(new_rhythm)
+                    sprites.add(new_rhythm)
+                elif spr[x] in activeRhythms:
+                    pygame.mouse.get_rel()
+                    pickedUpRhythm.add(spr[x])
+                elif spr[x] in draggers:
+                    pygame.mouse.get_rel()
+                    clickedDragger.add(spr[x])
+                elif spr[x] in kernels:
+                    pygame.mouse.get_rel()
+                    clickedKernel.add(spr[x])
+    except IndexError: pass
+    update_all()            
+    
+def sandbox_init() -> None:
+    global mode
+    mode = 'sandbox'
 
-def classes_clicked(class_, mouse_pos: tuple) -> None:
-    class_list = class_.sprites()
-    for x in range(0, len(class_list)):
-        if class_list[x].rect.collidepoint(mouse_pos):
-            Display.blit(workingDisplay,(0,0))
-            if class_ == buttons:
-                class_list[x].click()
-            elif class_ == rhythms:
-                pygame.mouse.get_rel()
-                new_rhythm = ActiveRhythm(class_list[x].binary, (mouse_pos))
-                activeRhythms.add(new_rhythm)
-                pickedUpRhythm.add(new_rhythm)
-            elif class_ == activeRhythms:
-                pygame.mouse.get_rel()
-                pickedUpRhythm.add(class_list[x])
-            elif class_ == draggers:
-                pygame.mouse.get_rel()
-                clickedDragger.add(class_list[x])
-            update_all()
+    # toolkit/workspace  background/text/lines  onto workingDisplay
+    toolkit_surf = pygame.Surface((disp_width/3,Display.get_height()-71))
+    toolkit_surf.fill((60,60,60))
+    toolkit_rect = toolkit_surf.get_rect(topleft = (0,70))
+    workingDisplay.blit(toolkit_surf, toolkit_rect)
+    toolkit_text = headerFont.render(' Toolkit ', True, ORANGE)
+    toolkit_text_rect = toolkit_text.get_rect(center = (disp_width/6,86))
+    workingDisplay.blit(toolkit_text,toolkit_text_rect)
+    workspace_surf = pygame.Surface((disp_width*2/3-2,disp_height-71))
+    workspace_surf.fill((220,220,220))
+    workspace_rect = workspace_surf.get_rect(topleft = (disp_width/3+2,70))
+    workingDisplay.blit(workspace_surf, workspace_rect)
+    workspace_text = headerFont.render(' Workspace ',True, WORKSPACEPURPLE, (200,200,200))
+    workspace_rect = workspace_text.get_rect(center = (8*disp_width/11+1,85))
+    workingDisplay.blit(workspace_text,workspace_rect)
+    pygame.draw.line(workingDisplay, BLACK, (disp_width/3,70),
+                     (disp_width/3,disp_height),2)
+    pygame.draw.line(workingDisplay, BLACK, (0,100), (disp_width,100))
+
+    pygame.draw.ellipse(workingDisplay,(50,150,50),
+                        (sandboxRect.left-5, sandboxRect.top-5, 
+                         sandboxRect.width+10, sandboxRect.height+10))
+    workingDisplay.blit(sandboxText, sandboxRect)
+    
+    # draw lines in workspace 
+    # (spaced by 22 pixels (rhydotlen) in x, 43 (rhy height) in y)
+    line_x = disp_width / 3 + 1
+    line_y = 100
+    while line_y < disp_height:
+        pygame.draw.line(workingDisplay, BLACK, (disp_width / 3, line_y),
+                         (disp_width,line_y))
+        line_y += 44
+    pygame.draw.rect(workingDisplay, BLACK, ((disp_width / 3, line_y - 44) ,
+                                             (disp_width * 2 / 3, disp_height - (line_y - 44))))
+    while line_x < disp_width:
+        pygame.draw.line(workingDisplay, BLACK, (line_x, 100), 
+                         (line_x, disp_height))
+        line_x += 22
+    pygame.draw.rect(workingDisplay, BLACK, ((line_x-22,100), 
+                                             (disp_width-(line_x-23), disp_height-100)))
+
+    # sandboxBackdrop.blit(workingDisplay, (0,0))
+    
+    # toolkit population
+    buttons.add(Button(['images/up_button_unpressed.png', 'images/up_button_pressed.png'],
+                                   (disp_width/3-100,75), ('UpDown', 0)))
+    buttons.add(Button(['images/down_button_unpressed.png', 'images/down_button_pressed.png'],
+                                   (disp_width/3-50,75), ('UpDown', 1)))
+    buttons.add(Button(['images/core_button_unpressed.png', 'images/core_button_pressed.png'],
+                        (40,75), ('CT', 0)))
+    buttons.add(Button(['images/trivial_button_unpressed.png', 'images/trivial_button_pressed.png'],
+                        (84,75), ('CT', 1)))
+    counters.add(Counter((disp_width/3-74, 76), 1))
+    
+    # workspace population
+    metronome_x = disp_width/3 + 55
+    buttons.add(Button(['images/on_button.png', 'images/off_button.png'],
+                       (metronome_x - 30, 72), ('onOff', 4)))
+    bpm_text = miniFont.render('Metronome (bpm):', True, WORKSPACEPURPLE)
+    bpm_text_rect = bpm_text.get_rect(midleft = (metronome_x, 86))
+    counters.add(Counter((metronome_x + bpm_text_rect.width + 5, 74), 60))
+    draggers.add(Dragger((metronome_x + bpm_text_rect.width + 41, 73), 'metronome'))
+    subdiv_x = disp_width/2 + 70
+    buttons.add(Button(['images/on_button.png', 'images/off_button.png'],
+                       (subdiv_x - 30, 72), ('onOff', 5)))
+    subdiv_text = miniFont.render('Subdivision:', True, WORKSPACEPURPLE)
+    subdiv_text_rect = subdiv_text.get_rect(midleft = (subdiv_x, 86))
+    counters.add(Counter((subdiv_x + subdiv_text_rect.width + 5, 74), 1))
+    draggers.add(Dragger((subdiv_x + subdiv_text_rect.width + 30, 73), 'subdivision'))
+    workingDisplay.blit(bpm_text, bpm_text_rect)
+    workingDisplay.blit(subdiv_text, subdiv_text_rect)
+
+    playbackButtons.add(Button(['images/play_button_unpressed.png', 'images/play_button_pressed.png'],
+                       (disp_width - 220, 72), ('playback', 0)))
+    playbackButtons.add(Button(['images/pause_button_unpressed.png', 'images/pause_button_pressed.png'],
+                       (disp_width - 190, 72), ('playback', 1)))
+    playbackButtons.add(Button(['images/stop_button_unpressed.png', 'images/stop_button_pressed.png'],
+                       (disp_width - 160, 72), ('playback', 2)))
+    
+    kernels.add(Kernel(x) for x in ['left', 'right'])
+
+    Display.blit(workingDisplay,(0,0))
+    
+    spritify()
+    update_all()
+
+def spritify() -> None:
+    classes = [buttons, counters, rhythms, activeRhythms, draggers, kernels, playbackButtons]
+    for x in classes:
+        for j in range(0, len(x.sprites())):
+            sprites.add(x.sprites()[j])
 
 # init display
 Display.blit(workingDisplay,(0,0))
@@ -387,11 +442,19 @@ pygame.display.update()
 # game loop
 while True:
     
+    # set up change in time, 60 fps, play metronome at elapsed time
+    dt = clock.tick(60)
+    if metronome and buttons.sprites()[4].status == 0:
+        bpm = counters.sprites()[1].num    
+        elapsed += dt
+        if elapsed >= (60 / bpm) * 1000:
+            loadedSound.play()
+            elapsed = 0
+
     if len(pickedUpRhythm.sprites()):
         rel = pygame.mouse.get_rel()
         if rel[0]+rel[1]:
             pickedUpRhythm.sprite.move(rel)
-            Display.blit(workingDisplay,(0,0))
             update_all()
     
     if len(clickedDragger.sprites()):
@@ -400,6 +463,11 @@ while True:
             clickedDragger.update('up')
         if rel[1] > 0:
             clickedDragger.update('down')
+        update_all()
+
+    if len(clickedKernel.sprites()):
+        rel = pygame.mouse.get_rel()
+        clickedKernel.sprite.move(rel[0])
         update_all()
 
 
@@ -411,6 +479,7 @@ while True:
         
         if event.type == MOUSEBUTTONDOWN:
             mouse_pos = pygame.mouse.get_pos()
+            mouse_buttons = pygame.mouse.get_pressed()
             
             # clickable top menu opbjects
             if homeRect.collidepoint(mouse_pos):
@@ -436,41 +505,41 @@ while True:
                 print('settings')
 
             # checking if present class instances were clicked
-            if len(buttons.sprites()):
-                classes_clicked(buttons, mouse_pos)
-
-            if len(rhythms.sprites()):
-                classes_clicked(rhythms, mouse_pos)
-
-            if len(activeRhythms.sprites()):
-                classes_clicked(activeRhythms, mouse_pos)
-
-            if len(draggers.sprites()):
-                classes_clicked(draggers, mouse_pos)
+            sprites_clicked(mouse_pos)
 
         if event.type == MOUSEBUTTONUP:
-
             # unclicking buttons
             if upDownClick:
                 buttons.sprites()[lastUpDownClicked].click()
                 buttons.update()
                 buttons.draw(Display)
             if playbackClick:
-                buttons.sprites()[lastPlaybackClicked].click()
-                buttons.update()
-                buttons.draw(Display)
+                playbackButtons.sprites()[lastPlaybackClicked].click()
+                playbackClick = False
+                playbackButtons.update()
+                playbackButtons.draw(Display)
 
             # dropping rhythms
             if len(pickedUpRhythm.sprites()):
                 Display.blit(workingDisplay,(0,0))
                 pur = pickedUpRhythm.sprite
+                killed = False
                 if pur.rect.left < disp_width/3 or pur.rect.top < 100 or pur.rect.centery > disp_height - 2*rhyDotLen or pur.rect.right > disp_width + 2:
                     pur.kill()
+                    killed = True
                 elif pur.move_bool == False:
                     pur.permutate()
                 else:
                     pur.move_bool = False
-                    pur.snap()
+                    pur.snap()    
+                # check collision with other active rhythms
+                pur.remove(activeRhythms)
+                for x in range(0, len(activeRhythms.sprites())):
+                    if activeRhythms.sprites()[x].rect.colliderect(pur.rect):
+                        pur.kill()
+                        killed = True
+                if killed == False:
+                    pur.add(activeRhythms)
                 pickedUpRhythm.empty()
                 update_all()
             
@@ -479,5 +548,10 @@ while True:
                 Display.blit(workingDisplay, (0,0))
                 clickedDragger.empty()
                 update_all()             
-   
+
+            if len(clickedKernel.sprites()):
+                clickedKernel.sprite.snap()
+                clickedKernel.empty()
+                update_all()
+
     pygame.display.update()
