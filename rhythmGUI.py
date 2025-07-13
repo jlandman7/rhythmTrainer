@@ -27,11 +27,12 @@ lastPlaybackClicked = 0
 ctState = 0
 coresAndTrivials = [cores,trivials]
 clock = pygame.time.Clock()
-metronome = False
+playing = False
 loadedSound = pygame.mixer.Sound('sounds/bongo4_cymatics.wav')
 loadedSound2 = pygame.mixer.Sound('sounds/shaker6_cymatics.wav')
 elapsed = 0
-elapsed2 = 0
+subelapsed = 0
+subdivHighlighter = 0
 
 # colors init
 BLACK = (0,0,0)
@@ -119,11 +120,11 @@ class Button(pygame.sprite.Sprite):
             else:
                 self.status = 0
 
-            global metronome
-            if self.type[1] == 0 and metronome == False:
-                metronome = True
-            if self.type[1] and metronome:
-                metronome = False
+            global playing
+            if self.type[1] == 0 and playing == False:
+                playing = True
+            if self.type[1] and playing:
+                playing = False
 
         elif self.type[0] == 'onOff':
             if self.status == 0:
@@ -215,7 +216,7 @@ class ActiveRhythm(pygame.sprite.Sprite):
         snap_by = (((pos[0] - int(disp_width / 3)) %22, 
                     (pos[1] - 100) % 44))
         self.rect = self.rect.move((-snap_by[0]+2, -snap_by[1]+1))
-        self.grid_pos = (round((self.rect.left - (disp_width / 3)) / 23) , 
+        self.grid_pos = (round((self.rect.left - (disp_width / 3)) / 22) , 
                          round((self.rect.top - 100) / 44))
         print(self.grid_pos)
 activeRhythms = pygame.sprite.Group()
@@ -265,15 +266,41 @@ class Kernel(pygame.sprite.Sprite):
         elif LR == 'right':
             self.image = pygame.image.load('images/right_kernel.png')
             self.rect = self.image.get_rect(midleft = (disp_width/3 + 20, 103))
+        self.grid_pos = round((self.rect.left - disp_width/3) / 22)
+
     
     def move(self, rel: int) -> None:
-        self.rect = self.rect.move(rel, 0)
+        if self.LR == 'left':
+            if self.rect.right + rel < kernels.sprites()[1].rect.left-1 and self.rect.left > disp_width/3-3:
+                self.rect.move_ip(rel, 0)
+        elif self.LR == 'right':
+            if self.rect.left + rel > kernels.sprites()[0].rect.right+1:
+                self.rect.move_ip(rel, 0)
     
     def snap(self) -> None:
-        if (self.rect.left - disp_width/3 - 2) % 22:
-            self.rect = self.rect.move(-(self.rect.left - disp_width/3 - 2) % 22 - 4, 0)
+        snap_by = (self.rect.left - disp_width / 3) % 22
+        if self.LR == 'left' and self.rect.left - snap_by > disp_width / 3:
+            self.rect.move_ip(-snap_by - 2,0)
+        elif self.LR == 'right':
+            self.rect.move_ip(22-snap_by,0)
+        self.rect.move_ip(-(self.rect.left - disp_width / 3) % 22 - 2, 0)
+        self.grid_pos = round((self.rect.left - disp_width/3) / 22)
 kernels = pygame.sprite.Group()
 clickedKernel = pygame.sprite.GroupSingle()
+
+class Highlighter(pygame.sprite.Sprite):
+    def __init__(self):
+        pygame.sprite.Sprite.__init__(self)
+        self.pos = 0
+        self.image = pygame.Surface((21, disp_height - 141))
+        self.image.fill((200,200,0))
+        self.rect = self.image.get_rect(topleft = (disp_width / 3 + 2, 101))
+
+    def update(self):
+        for x in activeRhythms.sprites():
+            if self.rect.colliderect(x.rect):
+                pass # if highlighting a black dot, play
+highlighter = pygame.sprite.GroupSingle()
 
 # global functions
 def update_rhythms(ctState, rhythmPage) -> None:
@@ -307,7 +334,9 @@ def update_rhythms(ctState, rhythmPage) -> None:
 
 def update_all() -> None:
     Display.blit(workingDisplay, (0,0))
-    update_rhythms(ctState, counters.sprites()[0].num)
+    try:
+        update_rhythms(ctState, counters.sprites()[0].num)
+    except IndexError: pass
     sprites.update()
     sprites.draw(Display)
 
@@ -424,13 +453,15 @@ def sandbox_init() -> None:
     
     kernels.add(Kernel(x) for x in ['left', 'right'])
 
+    highlighter.add(Highlighter())
+
     Display.blit(workingDisplay,(0,0))
     
     spritify()
     update_all()
 
 def spritify() -> None:
-    classes = [buttons, counters, rhythms, activeRhythms, draggers, kernels, playbackButtons]
+    classes = [buttons, counters, rhythms, highlighter, activeRhythms, draggers, kernels, playbackButtons]
     for x in classes:
         for j in range(0, len(x.sprites())):
             sprites.add(x.sprites()[j])
@@ -442,14 +473,24 @@ pygame.display.update()
 # game loop
 while True:
     
-    # set up change in time, 60 fps, play metronome at elapsed time
+    # set up change in time, 60 fps
     dt = clock.tick(60)
-    if metronome and buttons.sprites()[4].status == 0:
-        bpm = counters.sprites()[1].num    
+    
+    # if playing: set up timing and divs/subdivs
+    if playing:
         elapsed += dt
-        if elapsed >= (60 / bpm) * 1000:
-            loadedSound.play()
-            elapsed = 0
+        subelapsed += dt
+        bpm = counters.sprites()[1].num
+        subdiv = counters.sprites()[2].num
+        
+        # if time btwn subdivs has elapsed and subdiv button on
+        if subelapsed >= (60 / (bpm * subdiv)) * 1000 and buttons.sprites()[5].status == 0:
+                highlighter.sprite.pos += 1
+                subelapsed = 0
+        if elapsed >= (60 / bpm) * 1000 and buttons.sprites()[4].status == 0:                
+                loadedSound.play()
+                elapsed = 0
+    
 
     if len(pickedUpRhythm.sprites()):
         rel = pygame.mouse.get_rel()
