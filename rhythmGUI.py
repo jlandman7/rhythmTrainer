@@ -48,45 +48,27 @@ headerFont = pygame.font.SysFont('Serif',28)
 subHeaderFont = pygame.font.SysFont('Serif',22)
 miniFont = pygame.font.SysFont('Serif',16)
 
-# Top menu text + line
-homeText = homeFont.render(' Rhythm Trainer ', True, AQUA)
-homeRect = homeText.get_rect(center = (disp_width/2, 35))
-workingDisplay.blit(homeText, homeRect)
-
-sandboxText = headerFont.render(' Sandbox ', True, AQUA)
-sandboxRect = sandboxText.get_rect(center = (disp_width/10, 35))
-workingDisplay.blit(sandboxText, sandboxRect)
-
-practiceText = headerFont.render(' Practice ', True, AQUA)
-practiceRect = practiceText.get_rect(center = (disp_width/4 , 35))
-workingDisplay.blit(practiceText, practiceRect)
-
-guideText = headerFont.render(' Guide ', True, AQUA)
-guideRect = guideText.get_rect(center = (3*disp_width/4 , 35))
-workingDisplay.blit(guideText, guideRect)
-
-settingsText = headerFont.render(' Settings ', True, AQUA)
-settingsRect = settingsText.get_rect(center = (9*disp_width/10 , 35))
-workingDisplay.blit(settingsText, settingsRect)
-
-pygame.draw.line(workingDisplay, BLACK,(0,70),(disp_width,70))
-
 # classes and groups
 sprites = pygame.sprite.Group()
 
 class Button(pygame.sprite.Sprite):
-    def __init__(self, graphics: list, pos: tuple, type: tuple) -> None: # graphics: [unpressed, pressed]
+    def __init__(self, graphics, pos: tuple, type: tuple) -> None: # graphics: [unpressed, pressed]
         pygame.sprite.Sprite.__init__(self)
         self.type = type
-        self.graphics = graphics
-
-        if self.type[0] == 'UpDown' or self.type[0] == 'playback' or self.type[0] == 'onOff':
-            self.status = 0
-        elif self.type[0] == 'CT':
-            self.status = ctState
-
-        self.image = pygame.image.load(self.graphics[self.status]).convert_alpha()
-        self.rect = self.image.get_rect(topleft = pos)
+        if type[0] == 'home':
+            if type[1] == 0:
+                self.image = homeFont.render(graphics, True, AQUA)
+            else:
+                self.image = headerFont.render(graphics, True, AQUA)
+            self.rect = self.image.get_rect(center = (pos, 35))
+        else:
+            self.graphics: list = graphics
+            if self.type[0] == 'CT':
+                self.status = ctState
+            else:
+                self.status = 0
+            self.image = pygame.image.load(self.graphics[self.status]).convert_alpha()
+            self.rect = self.image.get_rect(topleft = pos)
         
     def click(self) -> None:   #toggle on/off 
         global ctState
@@ -121,24 +103,34 @@ class Button(pygame.sprite.Sprite):
             else:
                 self.status = 0
 
-            global playing
             #click play button -> play
-            if self.type[1] == 0 and playing == False:
-                playing = True
-                if buttons.sprites()[4].status == 0:
-                    loadedSound.play()
+            global timer
+            if self.type[1] == 0 and timer.active == False:
+                timer = Timer(counters.sprites()[1].num, counters.sprites()[2].num)
+                timer.pulse()
             #click pause button -> pause
-            elif self.type[1] == 1 and playing:
-                playing = 'paused'
-            elif self.type[1] == 2:
-                playing = False
-                highlighter.sprite.return_home()
+            elif self.type[1] and timer.active == True:
+                timer.deactivate()
+                if self.type[1] == 2:
+                    highlighter.sprite.return_home()
 
         elif self.type[0] == 'onOff':
             if self.status == 0:
                 self.status = 1
             else:
                 self.status = 0
+        
+        elif self.type[0] == 'home':
+            if self.type[1] == 0:
+                print('homescreen')
+            elif self.type[1] == 1:
+                sandbox_init()
+            elif self.type[1] == 2:
+                print('practice screen')
+            elif self.type[1] == 3:
+                print('guide screen')
+            elif self.type[1] == 4:
+                print('settings screen')
 
     def update(self) -> None:
         if self.type[0] == 'CT':
@@ -151,6 +143,7 @@ class Button(pygame.sprite.Sprite):
             self.image = pygame.image.load(self.graphics[self.status]).convert_alpha()
 buttons = pygame.sprite.Group()
 playbackButtons = pygame.sprite.Group()
+homeButtons = pygame.sprite.Group()
 
 class Counter(pygame.sprite.Sprite):
     def __init__(self, pos: tuple, default_num: int) -> None:
@@ -273,7 +266,7 @@ class Kernel(pygame.sprite.Sprite):
             self.rect = self.image.get_rect(midleft = (disp_width/3 - 2, 103))
         elif LR == 'right':
             self.image = pygame.image.load('images/right_kernel.png')
-            self.rect = self.image.get_rect(midleft = (disp_width - 10, 103))
+            self.rect = self.image.get_rect(midleft = (disp_width/3 + 87, 103))
         self.grid_pos = round((self.rect.left - disp_width/3) / 22)
 
     
@@ -307,7 +300,7 @@ class Highlighter(pygame.sprite.Sprite):
         self.chameleonic = False
 
     def return_home(self):
-        self.rect.move_ip(kernels.sprites()[0].rect.left + 3 - self.rect.left, 0)
+        self.rect.move_ip(kernels.sprites()[0].rect.left + 4 - self.rect.left, 0)
 
     def chameleon(self):
         self.image.fill((200, 0, 0))
@@ -317,20 +310,9 @@ class Highlighter(pygame.sprite.Sprite):
         self.image.fill((200, 200, 0))
         self.chameleonic = False
 
-    def update(self):
-        # move when appropriate (if playing)
-        if self.move:
-            if self.rect.right + 22 < kernels.sprites()[1].rect.centerx:
-                self.rect.move_ip(22,0)
-                self.move = 0
-            else:
-                self.return_home()
-        self.grid_pos: int = round((self.rect.left - (disp_width / 3)) / 22)
-
-        # turn yellow again for non metronome beats
-        if self.chameleonic:
-            self.dechameleon()
-        
+    def step(self):
+        self.rect.move_ip(22,0)
+        self.move = 0
         # if colliding with active rhythm, play any beats hovering on
         for x in activeRhythms.sprites():
             if self.rect.colliderect(x.rect):
@@ -339,10 +321,24 @@ class Highlighter(pygame.sprite.Sprite):
                     if x.binary[highlighted_pos] == '1':
                         loadedSound2.play()
                 except IndexError: pass
+
+    def update(self):
+        # move when appropriate (if playing)
+        if self.move:
+            if self.grid_pos < kernels.sprites()[1].grid_pos - 1:
+                self.step()
+            else:
+                self.return_home()
+        self.grid_pos = round((self.rect.left - (disp_width / 3)) / 22)
+
+        # turn yellow again for non metronome beats
+        if self.chameleonic:
+            self.dechameleon()
+        
 highlighter = pygame.sprite.GroupSingle()
 
 class Timer:
-    def __init__(self, bpm, subdivs):
+    def __init__(self, bpm = 0, subdivs = 0):
         self.duration = bpm
         self.sub_duration = subdivs
         self.start_time = pygame.time.get_ticks()
@@ -370,8 +366,20 @@ class Timer:
                 self.subdivision()
             if current_time - self.start_time >= self.duration:
                 self.pulse()
-
+timer =  Timer()
 # global functions
+def top_menu_init():
+    top_menu_data = [(' Rhythm Trainer ', (disp_width/2), ('home', 0)), 
+                     (' Sandbox ', (disp_width/10), ('home', 1)),
+                     (' Practice ', (disp_width/4), ('home', 2)),
+                     (' Guide ', (3*disp_width/4), ('home', 3)),
+                     (' Settings ', (9*disp_width/10), ('home', 4))]
+    
+    for x in top_menu_data:
+        homeButtons.add(Button(x[0], x[1], x[2]))
+
+    pygame.draw.line(workingDisplay, BLACK, (0,70), (disp_width, 70))
+
 def update_rhythms(ctState, rhythmPage) -> None:
     for x in rhythms:
         x.kill()      
@@ -419,6 +427,8 @@ def sprites_clicked(mouse_pos: tuple) -> None:
                     spr[x].click()
                 elif spr[x] in playbackButtons:
                     spr[x].click()
+                elif spr[x] in homeButtons:
+                    spr[x].click()
                 elif spr[x] in rhythms:
                     pygame.mouse.get_rel()
                     new_rhythm = ActiveRhythm(spr[x].binary, (mouse_pos))
@@ -460,10 +470,10 @@ def sandbox_init() -> None:
                      (disp_width/3,disp_height),2)
     pygame.draw.line(workingDisplay, BLACK, (0,100), (disp_width,100))
 
+    sb_text_rect = homeButtons.sprites()[1].rect
     pygame.draw.ellipse(workingDisplay,(50,150,50),
-                        (sandboxRect.left-5, sandboxRect.top-5, 
-                         sandboxRect.width+10, sandboxRect.height+10))
-    workingDisplay.blit(sandboxText, sandboxRect)
+                        (sb_text_rect.left-5, sb_text_rect.top-5, 
+                         sb_text_rect.width+10, sb_text_rect.height+10))
     
     # draw lines in workspace 
     # (spaced by 22 pixels (rhydotlen) in x, 43 (rhy height) in y)
@@ -530,13 +540,16 @@ def sandbox_init() -> None:
     update_all()
 
 def spritify() -> None:
-    classes = [buttons, counters, rhythms, highlighter, activeRhythms, draggers, kernels, playbackButtons]
+    classes = [homeButtons, buttons, counters, rhythms, highlighter, activeRhythms, draggers, kernels, playbackButtons]
     for x in classes:
         for j in range(0, len(x.sprites())):
             sprites.add(x.sprites()[j])
 
 # init display
+top_menu_init()
 Display.blit(workingDisplay,(0,0))
+spritify()
+update_all()
 pygame.display.update()
 
 # game loop
@@ -545,29 +558,29 @@ while True:
     # set up change in time, 60 fps
     dt = clock.tick(60)
     
-    # if playing: set up timing and divs/subdivs
-    if playing == True:
-        elapsed += dt
-        subelapsed += dt
-        bpm = counters.sprites()[1].num
-        subdiv = counters.sprites()[2].num
+    ###  if playing: set up timing and divs/subdivs
+    # if playing == True:
+    #     elapsed += dt
+    #     subelapsed += dt
+    #     bpm = counters.sprites()[1].num
+    #     subdiv = counters.sprites()[2].num
         
-        # if time btwn subdivs has elapsed and subdiv button on
-        if subelapsed >= (60 / (bpm * subdiv)) * 1000 and buttons.sprites()[5].status == 0:
-                highlighter.sprite.move += 1
-                subelapsed = 0
-                update_needed = True
-        if elapsed >= (60 / bpm) * 1000 and buttons.sprites()[4].status == 0:                
-                loadedSound.play()
-                highlighter.sprite.chameleon()
-                elapsed = 0
-                subelapsed = 0
-                update_needed = True
-    elif playing == 'paused':
-        pass
-    else:
-        elapsed = 0
-        subelapsed = 0
+    #     # if time btwn subdivs has elapsed and subdiv button on
+    #     if subelapsed >= (60 / (bpm * subdiv)) * 1000 and buttons.sprites()[5].status == 0:
+    #             highlighter.sprite.move += 1
+    #             subelapsed = 0
+    #             update_needed = True
+    #     if elapsed >= (60 / bpm) * 1000 and buttons.sprites()[4].status == 0:                
+    #             loadedSound.play()
+    #             highlighter.sprite.chameleon()
+    #             elapsed = 0
+    #             subelapsed = 0
+    #             update_needed = True
+    # elif playing == 'paused':
+    #     pass
+    # else:
+    #     elapsed = 0
+    #     subelapsed = 0
 
     if len(pickedUpRhythm.sprites()):
         rel = pygame.mouse.get_rel()
@@ -607,29 +620,6 @@ while True:
             mouse_pos = pygame.mouse.get_pos()
             mouse_buttons = pygame.mouse.get_pressed()
             
-            # clickable top menu opbjects
-            if homeRect.collidepoint(mouse_pos):
-                print('homescreen')
-                
-            if sandboxRect.collidepoint(mouse_pos):
-                sandbox_init()
-
-            '''    
-            if practiceRect.collidepoint(pos):
-                pygame.draw.ellipse(Display,(120,130,130),(sandboxRect.left-5, sandboxRect.top-5,
-                                                           sandboxRect.width+10, sandboxRect.height+10))
-                Display.blit(sandboxText, sandboxRect)
-                pygame.draw.ellipse(Display,(50,150,50),(practiceRect.left-5, practiceRect.top-5,
-                                                         practiceRect.width+10, practiceRect.height+10))
-                Display.blit(practiceText, practiceRect)
-            '''
-
-            if guideRect.collidepoint(mouse_pos):
-                print('guide screen')
-                
-            if settingsRect.collidepoint(mouse_pos):
-                print('settings')
-
             # checking if present class instances were clicked
             sprites_clicked(mouse_pos)
 
