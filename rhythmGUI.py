@@ -4,7 +4,7 @@ from pygame.locals import *
 import matrixGen3
 from matrixGen3 import data, cores, trivials
 
-# display init
+### display init ---------------------------------------------
 pygame.init()
 disp_width = 1300
 disp_height = 800
@@ -14,7 +14,7 @@ workingDisplay = pygame.Surface((disp_width,disp_height))
 workingDisplay.fill((120,130,130))
 sandboxBackdrop = pygame.Surface((disp_width,disp_height))
 
-# vars init
+### vars init ------------------------------------------------
 mode = 0
 updateNeeded = False
 rhyDotLen = 22
@@ -27,28 +27,23 @@ lastPlaybackClicked = 0
 ctState = 0
 coresAndTrivials = [cores,trivials]
 clock = pygame.time.Clock()
-playing = False
 loadedSound = pygame.mixer.Sound('sounds/bongo4_cymatics.wav')
 loadedSound2 = pygame.mixer.Sound('sounds/shaker6_cymatics.wav')
-elapsed = 0
-subelapsed = 0
 subdivHighlighter = 0
 update_needed = False
 
-# colors init
+### Colors and fonts init -------------------------------------
 BLACK = (0,0,0)
 WHITE = (255,255,255)
 AQUA = (0,200,155)
 ORANGE = (180,70,30)
 WORKSPACEPURPLE = (120, 30, 180)
-
-# Fonts init
 homeFont = pygame.font.SysFont('Serif', 48)
 headerFont = pygame.font.SysFont('Serif',28)
 subHeaderFont = pygame.font.SysFont('Serif',22)
 miniFont = pygame.font.SysFont('Serif',16)
 
-# classes and groups
+### classes and groups ----------------------------------------
 sprites = pygame.sprite.Group()
 
 class Button(pygame.sprite.Sprite):
@@ -95,6 +90,7 @@ class Button(pygame.sprite.Sprite):
                 ghostIterator = [0]
         
         elif self.type[0] == 'playback':
+            # set up unclicking
             if self.status == 0:
                 global playbackClick, lastPlaybackClicked
                 self.status = 1
@@ -103,12 +99,11 @@ class Button(pygame.sprite.Sprite):
             else:
                 self.status = 0
 
-            #click play button -> play
+            # click play button -> play
             global timer
             if self.type[1] == 0 and timer.active == False:
                 timer = Timer(counters.sprites()[1].num, counters.sprites()[2].num)
-                timer.pulse()
-            #click pause button -> pause
+            # click pause/stop button -> pause/return home
             elif self.type[1] and timer.active == True:
                 timer.deactivate()
                 if self.type[1] == 2:
@@ -298,10 +293,15 @@ class Highlighter(pygame.sprite.Sprite):
         self.rect = self.image.get_rect(topleft = (disp_width / 3 + 2, 101))
         self.grid_pos = 0
         self.chameleonic = False
+        self.sounds = []
 
     def return_home(self):
         self.rect.move_ip(kernels.sprites()[0].rect.left + 4 - self.rect.left, 0)
+        self.move = 0
+        self.grid_pos = round((self.rect.left - (disp_width / 3)) / 22)
+        self.rhythm_collisions()
 
+    # turns highlighter red and plays sound
     def chameleon(self):
         self.image.fill((200, 0, 0))
         self.chameleonic = True
@@ -313,61 +313,79 @@ class Highlighter(pygame.sprite.Sprite):
     def step(self):
         self.rect.move_ip(22,0)
         self.move = 0
+        self.grid_pos = round((self.rect.left - (disp_width / 3)) / 22)
         # if colliding with active rhythm, play any beats hovering on
+        self.rhythm_collisions()
+    
+    def rhythm_collisions(self):
         for x in activeRhythms.sprites():
             if self.rect.colliderect(x.rect):
                 highlighted_pos = self.grid_pos - x.grid_pos[0]
                 try:
                     if x.binary[highlighted_pos] == '1':
-                        loadedSound2.play()
+                        #### add x.sound to self.sounds
+                       self.sounds.append(loadedSound2)
                 except IndexError: pass
+
+    def play_sounds(self):
+        if self.sounds:
+            for x in self.sounds:
+                x.play()
+            self.sounds = []
 
     def update(self):
         # move when appropriate (if playing)
+        if self.chameleonic == True:
+            self.sounds.append(loadedSound) # add metronome sound to sounds
         if self.move:
             if self.grid_pos < kernels.sprites()[1].grid_pos - 1:
                 self.step()
             else:
-                self.return_home()
-        self.grid_pos = round((self.rect.left - (disp_width / 3)) / 22)
-
-        # turn yellow again for non metronome beats
-        if self.chameleonic:
-            self.dechameleon()
-        
+                self.return_home() 
+        self.play_sounds()    
 highlighter = pygame.sprite.GroupSingle()
 
 class Timer:
-    def __init__(self, bpm = 0, subdivs = 0):
-        self.duration = bpm
-        self.sub_duration = subdivs
+    def __init__(self, bpm = 1, subdivs = 1):
+        self.duration = 60 / bpm * 1000
+        self.sub_duration = self.duration / subdivs
         self.start_time = pygame.time.get_ticks()
-        self.active = False
+        print('start: ' + str(self.start_time))
+        if bpm == 1 and subdivs == 1:
+            self.active = False
+        else:  
+            self.active = True
         self.sub_iterator = 0
+        if len(buttons.sprites())>2:
+            if buttons.sprites()[4].status == 0:
+                highlighter.sprite.chameleon()
 
     def subdivision(self):
         highlighter.sprite.move += 1
-
-    def pulse(self):
-        if buttons.sprites()[4].status == 0:
-            loadedSound.play()
-        highlighter.sprite.chameleon()
-        self.active = True
-        self.start_time = pygame.time.get_ticks()
+        self.sub_iterator += 1
+        global update_needed
+        update_needed = True
 
     def deactivate(self):
         self.active = False
         self.start_time = 0
 
-    def update(self):
+    def terminate(self):
         if self.active:
-            current_time = pygame.time.get_ticks()
-            if current_time - self.sub_duration * self.sub_iterator and buttons.sprites()[5].status == 0:
-                self.subdivision()
-            if current_time - self.start_time >= self.duration:
-                self.pulse()
-timer =  Timer()
-# global functions
+            global timer
+            timer = Timer(counters.sprites()[1].num, counters.sprites()[2].num)
+
+    def update(self):
+        current_time = pygame.time.get_ticks()
+        elapsed =  (current_time - self.start_time)
+        #print(str(self.sub_iterator) + '  ' + str(elapsed))
+        if elapsed - (self.sub_duration * self.sub_iterator) >= 0:
+            self.subdivision()
+        if elapsed >= self.duration:
+            self.terminate()
+timer = Timer()
+
+### global functions -----------------------------------------
 def top_menu_init():
     top_menu_data = [(' Rhythm Trainer ', (disp_width/2), ('home', 0)), 
                      (' Sandbox ', (disp_width/10), ('home', 1)),
@@ -415,6 +433,9 @@ def update_all() -> None:
         update_rhythms(ctState, counters.sprites()[0].num)
     except IndexError: pass
     sprites.update()
+    if timer:    
+        if timer.active:
+            timer.update()
     sprites.draw(Display)
 
 def sprites_clicked(mouse_pos: tuple) -> None:
@@ -545,42 +566,19 @@ def spritify() -> None:
         for j in range(0, len(x.sprites())):
             sprites.add(x.sprites()[j])
 
-# init display
+### init display ---------------------------------------------
 top_menu_init()
 Display.blit(workingDisplay,(0,0))
 spritify()
 update_all()
 pygame.display.update()
 
-# game loop
+### game loop ------------------------------------------------
 while True:
-    
-    # set up change in time, 60 fps
-    dt = clock.tick(60)
-    
-    ###  if playing: set up timing and divs/subdivs
-    # if playing == True:
-    #     elapsed += dt
-    #     subelapsed += dt
-    #     bpm = counters.sprites()[1].num
-    #     subdiv = counters.sprites()[2].num
-        
-    #     # if time btwn subdivs has elapsed and subdiv button on
-    #     if subelapsed >= (60 / (bpm * subdiv)) * 1000 and buttons.sprites()[5].status == 0:
-    #             highlighter.sprite.move += 1
-    #             subelapsed = 0
-    #             update_needed = True
-    #     if elapsed >= (60 / bpm) * 1000 and buttons.sprites()[4].status == 0:                
-    #             loadedSound.play()
-    #             highlighter.sprite.chameleon()
-    #             elapsed = 0
-    #             subelapsed = 0
-    #             update_needed = True
-    # elif playing == 'paused':
-    #     pass
-    # else:
-    #     elapsed = 0
-    #     subelapsed = 0
+
+    if timer:
+        if timer.active:
+            timer.update()
 
     if len(pickedUpRhythm.sprites()):
         rel = pygame.mouse.get_rel()
@@ -609,12 +607,12 @@ while True:
             pygame.quit()
             sys.exit()
 
-        if event.type == KEYDOWN:
-            if event.key == 32:
-                if playing == True:
-                    playing = 'paused'
-                else:
-                    playing = True
+        # if event.type == KEYDOWN:
+        #     if event.key == 32:
+        #         if playing == True:
+        #             playing = 'paused'
+        #         else:
+        #             playing = True
 
         if event.type == MOUSEBUTTONDOWN:
             mouse_pos = pygame.mouse.get_pos()
