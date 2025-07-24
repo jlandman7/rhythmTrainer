@@ -318,14 +318,15 @@ class Highlighter(pygame.sprite.Sprite):
         self.rhythm_collisions()
     
     def rhythm_collisions(self):
-        for x in activeRhythms.sprites():
-            if self.rect.colliderect(x.rect):
-                highlighted_pos = self.grid_pos - x.grid_pos[0]
-                try:
-                    if x.binary[highlighted_pos] == '1':
-                        #### add x.sound to self.sounds
-                       self.sounds.append(loadedSound2)
-                except IndexError: pass
+        if buttons.sprites()[5].status == 0:
+            for x in activeRhythms.sprites():
+                if self.rect.colliderect(x.rect):
+                    highlighted_pos = self.grid_pos - x.grid_pos[0]
+                    try:
+                        if x.binary[highlighted_pos] == '1':
+                            #### add x.sound to self.sounds
+                            self.sounds.append(loadedSound2)
+                    except IndexError: pass
 
     def play_sounds(self):
         if self.sounds:
@@ -337,6 +338,7 @@ class Highlighter(pygame.sprite.Sprite):
         # move when appropriate (if playing)
         if self.chameleonic == True:
             self.sounds.append(loadedSound) # add metronome sound to sounds
+            self.dechameleon()
         if self.move:
             if self.grid_pos < kernels.sprites()[1].grid_pos - 1:
                 self.step()
@@ -350,7 +352,6 @@ class Timer:
         self.duration = 60 / bpm * 1000
         self.sub_duration = self.duration / subdivs
         self.start_time = pygame.time.get_ticks()
-        print('start: ' + str(self.start_time))
         if bpm == 1 and subdivs == 1:
             self.active = False
         else:  
@@ -359,6 +360,9 @@ class Timer:
         if len(buttons.sprites())>2:
             if buttons.sprites()[4].status == 0:
                 highlighter.sprite.chameleon()
+        try:
+            highlighter.sprite.update()
+        except AttributeError: pass
 
     def subdivision(self):
         highlighter.sprite.move += 1
@@ -368,6 +372,7 @@ class Timer:
 
     def deactivate(self):
         self.active = False
+        highlighter.sprite.sounds = []
         self.start_time = 0
 
     def terminate(self):
@@ -378,8 +383,7 @@ class Timer:
     def update(self):
         current_time = pygame.time.get_ticks()
         elapsed =  (current_time - self.start_time)
-        #print(str(self.sub_iterator) + '  ' + str(elapsed))
-        if elapsed - (self.sub_duration * self.sub_iterator) >= 0:
+        if elapsed - (self.sub_duration * self.sub_iterator) >= self.sub_duration:
             self.subdivision()
         if elapsed >= self.duration:
             self.terminate()
@@ -438,7 +442,7 @@ def update_all() -> None:
             timer.update()
     sprites.draw(Display)
 
-def sprites_clicked(mouse_pos: tuple) -> None:
+def sprites_clicked(mouse_pos: tuple, mouse_buttons: tuple) -> None:
     try:
         for x in range(0, len(sprites.sprites())):
             spr = sprites.sprites()
@@ -457,8 +461,11 @@ def sprites_clicked(mouse_pos: tuple) -> None:
                     pickedUpRhythm.add(new_rhythm)
                     sprites.add(new_rhythm)
                 elif spr[x] in activeRhythms:
-                    pygame.mouse.get_rel()
-                    pickedUpRhythm.add(spr[x])
+                    if mouse_buttons[0] == True:
+                        pygame.mouse.get_rel()
+                        pickedUpRhythm.add(spr[x])
+                    elif mouse_buttons[2] == True:
+                        pass # display sound change surface
                 elif spr[x] in draggers:
                     pygame.mouse.get_rel()
                     clickedDragger.add(spr[x])
@@ -580,13 +587,14 @@ while True:
         if timer.active:
             timer.update()
 
+    # picking up rhythms
     if len(pickedUpRhythm.sprites()):
         rel = pygame.mouse.get_rel()
         if rel[0]+rel[1]:
             pickedUpRhythm.sprite.move(rel)
         update_needed = True
 
-    
+    # dragging draggers
     if len(clickedDragger.sprites()):
         rel = pygame.mouse.get_rel()
         if rel[1] < 0:
@@ -595,7 +603,7 @@ while True:
             clickedDragger.update('down')
         update_needed = True
 
-
+    # moving kernels
     if len(clickedKernel.sprites()):
         rel = pygame.mouse.get_rel()
         clickedKernel.sprite.move(rel[0])
@@ -617,9 +625,8 @@ while True:
         if event.type == MOUSEBUTTONDOWN:
             mouse_pos = pygame.mouse.get_pos()
             mouse_buttons = pygame.mouse.get_pressed()
-            
             # checking if present class instances were clicked
-            sprites_clicked(mouse_pos)
+            sprites_clicked(mouse_pos, mouse_buttons)
 
         if event.type == MOUSEBUTTONUP:
             # unclicking buttons
