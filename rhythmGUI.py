@@ -28,7 +28,9 @@ ctState = 0
 coresAndTrivials = [cores,trivials]
 clock = pygame.time.Clock()
 loadedSound = pygame.mixer.Sound('sounds/bongo4_cymatics.wav')
-loadedSound2 = pygame.mixer.Sound('sounds/shaker6_cymatics.wav')
+# loadedSound2 = pygame.mixer.Sound('sounds/shaker6_cymatics.wav')
+sounds = [pygame.mixer.Sound(x) for x in ('sounds/kick.wav','sounds/snare.wav',
+                                          'sounds/hihat.wav','sounds/ride.wav')]
 subdivHighlighter = 0
 update_needed = False
 
@@ -42,6 +44,8 @@ homeFont = pygame.font.SysFont('Serif', 48)
 headerFont = pygame.font.SysFont('Serif',28)
 subHeaderFont = pygame.font.SysFont('Serif',22)
 miniFont = pygame.font.SysFont('Serif',16)
+colors = [(237,55,51), (236,146,48), (233,60,160), (207,102,205),
+          (109, 157, 205), (96,99,205),(144, 208, 68),(233,209,67)]
 
 ### classes and groups ----------------------------------------
 sprites = pygame.sprite.Group()
@@ -167,10 +171,13 @@ class Rhythm(pygame.sprite.Sprite):
         self.binary = coresAndTrivials[ctState][rhythmIterator]
 
     # I : binary string / O : surface with visual rhythm
-    def rhythm_surface(rhythm: str) -> pygame.Surface:
+    def rhythm_surface(rhythm: str,*,color: int = -1) -> pygame.Surface:
         w = 0
         rhy_surf = pygame.Surface((w, 2*rhyDotLen-1))
-        rhy_surf.fill(WHITE)
+        if color>=0:
+            rhy_surf.fill(colors[color])
+        else:
+            rhy_surf.fill(WHITE)
         for j in range(0,len(rhythm)):
             if rhythm[j] == "1":
                 w += rhyDotLen
@@ -198,6 +205,7 @@ class ActiveRhythm(pygame.sprite.Sprite):
         self.grid_pos = (round((self.rect.left - (disp_width / 3)) / 22) , 
                          round((self.rect.top - 100) / 44))
         self.move_bool = False
+        self.sound = 0
     
     def permutate(self) -> None:
         self.binary = self.binary[1:]+self.binary[0]
@@ -207,6 +215,11 @@ class ActiveRhythm(pygame.sprite.Sprite):
         self.rect = self.rect.move((rel[0], rel[1]))
         self.move_bool = True
 
+    def soundChange(self, newSound: int):
+        self.sound = newSound
+        self.image = Rhythm.rhythm_surface(self.binary, color = self.sound)
+        print(self.sound)
+
     def snap(self) -> None:
         pos = self.rect.topleft
         snap_by = (((pos[0] - int(disp_width / 3)) %22, 
@@ -214,7 +227,6 @@ class ActiveRhythm(pygame.sprite.Sprite):
         self.rect = self.rect.move((-snap_by[0]+2, -snap_by[1]+1))
         self.grid_pos = (round((self.rect.left - (disp_width / 3)) / 22) , 
                          round((self.rect.top - 100) / 44))
-        print(self.grid_pos)
 activeRhythms = pygame.sprite.Group()
 pickedUpRhythm = pygame.sprite.GroupSingle()
 
@@ -325,7 +337,8 @@ class Highlighter(pygame.sprite.Sprite):
                     try:
                         if x.binary[highlighted_pos] == '1':
                             #### add x.sound to self.sounds
-                            self.sounds.append(loadedSound2)
+                            # self.sounds.append(loadedSound2)
+                            self.sounds.append(sounds[x.sound])
                     except IndexError: pass
 
     def play_sounds(self):
@@ -388,6 +401,23 @@ class Timer:
         if elapsed >= self.duration:
             self.terminate()
 timer = Timer()
+
+class SoundChanger(pygame.sprite.Sprite):
+    def __init__(self, pos: tuple, assocRhythm: object):
+        pygame.sprite.Sprite.__init__(self)
+        self.image = pygame.image.load('images/soundChangeWheel.png').convert_alpha()
+        self.rect = self.image.get_rect(center = pos)
+        self.assocRhythm = assocRhythm
+    
+    def octant_check(self, pos):
+        radius = ((pos[0] - self.rect.centerx)**2 + (pos[1] - self.rect.centery)**2)**(1/2)
+        if radius < 81:
+            LR: int = pos[0] < self.rect.centerx   #left true, right false
+            UD: int = pos[1] > self.rect.centery   #down false, up true
+            hug: int = (pos[0])**2 > (pos[1])**2   #y-hug false, x-hug true
+            octant = 4*LR + 2*UD + hug
+            self.assocRhythm.soundChange(octant)
+soundChanger = pygame.sprite.GroupSingle()
 
 ### global functions -----------------------------------------
 def top_menu_init():
@@ -454,6 +484,9 @@ def sprites_clicked(mouse_pos: tuple, mouse_buttons: tuple) -> None:
                     spr[x].click()
                 elif spr[x] in homeButtons:
                     spr[x].click()
+                elif spr[x] in soundChanger:
+                    print('y')
+                    spr[x].octant_check(mouse_pos)
                 elif spr[x] in rhythms:
                     pygame.mouse.get_rel()
                     new_rhythm = ActiveRhythm(spr[x].binary, (mouse_pos))
@@ -465,7 +498,9 @@ def sprites_clicked(mouse_pos: tuple, mouse_buttons: tuple) -> None:
                         pygame.mouse.get_rel()
                         pickedUpRhythm.add(spr[x])
                     elif mouse_buttons[2] == True:
-                        pass # display sound change surface
+                        wheel = SoundChanger(mouse_pos, spr[x])
+                        soundChanger.add(wheel)
+                        sprites.add(wheel)
                 elif spr[x] in draggers:
                     pygame.mouse.get_rel()
                     clickedDragger.add(spr[x])
@@ -627,13 +662,14 @@ while True:
             mouse_buttons = pygame.mouse.get_pressed()
             # checking if present class instances were clicked
             sprites_clicked(mouse_pos, mouse_buttons)
+            if len(soundChanger.sprites()):
+                soundChanger.sprite.kill()
 
         if event.type == MOUSEBUTTONUP:
             # unclicking buttons
             if upDownClick:
                 buttons.sprites()[lastUpDownClicked].click()
                 update_needed = True
-
             if playbackClick:
                 playbackButtons.sprites()[lastPlaybackClicked].click()
                 playbackClick = False
@@ -669,6 +705,7 @@ while True:
                 clickedDragger.empty()
                 update_needed = True
 
+            # dropping kernel
             if len(clickedKernel.sprites()):
                 clickedKernel.sprite.snap()
                 clickedKernel.empty()
