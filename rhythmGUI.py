@@ -29,8 +29,8 @@ coresAndTrivials = [cores,trivials]
 clock = pygame.time.Clock()
 loadedSound = pygame.mixer.Sound('sounds/bongo4_cymatics.wav')
 # loadedSound2 = pygame.mixer.Sound('sounds/shaker6_cymatics.wav')
-sounds = [pygame.mixer.Sound(x) for x in ('sounds/kick.wav','sounds/snare.wav',
-                                          'sounds/hihat.wav','sounds/ride.wav')]
+sounds = [pygame.mixer.Sound(x) for x in ('sounds/snare.wav','sounds/kick.wav',
+                                          'sounds/ride.wav','sounds/hihat.wav')]
 subdivHighlighter = 0
 update_needed = False
 
@@ -44,8 +44,8 @@ homeFont = pygame.font.SysFont('Serif', 48)
 headerFont = pygame.font.SysFont('Serif',28)
 subHeaderFont = pygame.font.SysFont('Serif',22)
 miniFont = pygame.font.SysFont('Serif',16)
-colors = [(237,55,51), (236,146,48), (233,60,160), (207,102,205),
-          (109, 157, 205), (96,99,205),(144, 208, 68),(233,209,67)]
+colors = [(236,146,48), (237,35,51), (207,102,205), (233,60,160),
+          (233,209,67), (144, 208, 68), (96,99,205), (109, 157, 205)]
 
 ### classes and groups ----------------------------------------
 sprites = pygame.sprite.Group()
@@ -107,6 +107,7 @@ class Button(pygame.sprite.Sprite):
             global timer
             if self.type[1] == 0 and timer.active == False:
                 timer = Timer(counters.sprites()[1].num, counters.sprites()[2].num)
+                highlighter.sprite.return_home()
             # click pause/stop button -> pause/return home
             elif self.type[1] and timer.active == True:
                 timer.deactivate()
@@ -175,22 +176,23 @@ class Rhythm(pygame.sprite.Sprite):
         w = 0
         rhy_surf = pygame.Surface((w, 2*rhyDotLen-1))
         if color>=0:
-            rhy_surf.fill(colors[color])
+            filler = colors[color]
         else:
-            rhy_surf.fill(WHITE)
+            filler = WHITE
+            rhy_surf.fill(filler)
         for j in range(0,len(rhythm)):
             if rhythm[j] == "1":
                 w += rhyDotLen
                 temp = rhy_surf
                 rhy_surf = pygame.Surface((w, 2*rhyDotLen-1))
-                rhy_surf.fill(WHITE)
+                rhy_surf.fill(filler)
                 rhy_surf.blit(temp, (0,0))
                 pygame.draw.circle(rhy_surf, BLACK, (rhyDotLen*j+11,11), 10)
             elif rhythm[j] == "0":
                 w += rhyDotLen
                 temp = rhy_surf
                 rhy_surf = pygame.Surface((w, 2*rhyDotLen-1))
-                rhy_surf.fill(WHITE)
+                rhy_surf.fill(filler)
                 rhy_surf.blit(temp, (0,0))
                 pygame.draw.circle(rhy_surf, BLACK, (rhyDotLen*j+11,32), 10, 2)
         return rhy_surf
@@ -218,7 +220,7 @@ class ActiveRhythm(pygame.sprite.Sprite):
     def soundChange(self, newSound: int):
         self.sound = newSound
         self.image = Rhythm.rhythm_surface(self.binary, color = self.sound)
-        print(self.sound)
+        print("active rhythm sound: " + str(self.sound))
 
     def snap(self) -> None:
         pos = self.rect.topleft
@@ -309,26 +311,21 @@ class Highlighter(pygame.sprite.Sprite):
 
     def return_home(self):
         self.rect.move_ip(kernels.sprites()[0].rect.left + 4 - self.rect.left, 0)
-        self.move = 0
-        self.grid_pos = round((self.rect.left - (disp_width / 3)) / 22)
-        self.rhythm_collisions()
 
+    def step(self):
+        self.rect.move_ip(22,0)
+    
     # turns highlighter red and plays sound
     def chameleon(self):
         self.image.fill((200, 0, 0))
+        self.sounds.append(loadedSound)
         self.chameleonic = True
 
     def dechameleon(self):
         self.image.fill((200, 200, 0))
         self.chameleonic = False
 
-    def step(self):
-        self.rect.move_ip(22,0)
-        self.move = 0
-        self.grid_pos = round((self.rect.left - (disp_width / 3)) / 22)
-        # if colliding with active rhythm, play any beats hovering on
-        self.rhythm_collisions()
-    
+    # if colliding with active rhythm, play any beats hovering on
     def rhythm_collisions(self):
         if buttons.sprites()[5].status == 0:
             for x in activeRhythms.sprites():
@@ -336,8 +333,6 @@ class Highlighter(pygame.sprite.Sprite):
                     highlighted_pos = self.grid_pos - x.grid_pos[0]
                     try:
                         if x.binary[highlighted_pos] == '1':
-                            #### add x.sound to self.sounds
-                            # self.sounds.append(loadedSound2)
                             self.sounds.append(sounds[x.sound])
                     except IndexError: pass
 
@@ -347,35 +342,32 @@ class Highlighter(pygame.sprite.Sprite):
                 x.play()
             self.sounds = []
 
-    def update(self):
-        # move when appropriate (if playing)
-        if self.chameleonic == True:
-            self.sounds.append(loadedSound) # add metronome sound to sounds
+    def reset(self):
+        if buttons.sprites()[5].status == 0:
+            self.rhythm_collisions()
+        if self.chameleonic:
             self.dechameleon()
+        self.move = 0
+        self.grid_pos = round((self.rect.left - (disp_width / 3)) / 22)
+
+    def update(self):
+        # after a subdivision: decham, step or return home, check rhycollide
         if self.move:
             if self.grid_pos < kernels.sprites()[1].grid_pos - 1:
                 self.step()
             else:
-                self.return_home() 
-        self.play_sounds()    
+                self.return_home()
+            self.reset()
+        self.play_sounds()
 highlighter = pygame.sprite.GroupSingle()
 
 class Timer:
     def __init__(self, bpm = 1, subdivs = 1):
-        self.duration = 60 / bpm * 1000
-        self.sub_duration = self.duration / subdivs
-        self.start_time = pygame.time.get_ticks()
         if bpm == 1 and subdivs == 1:
             self.active = False
-        else:  
+        else:
             self.active = True
-        self.sub_iterator = 0
-        if len(buttons.sprites())>2:
-            if buttons.sprites()[4].status == 0:
-                highlighter.sprite.chameleon()
-        try:
-            highlighter.sprite.update()
-        except AttributeError: pass
+            self.reset(counters.sprites()[1].num, counters.sprites()[2].num)
 
     def subdivision(self):
         highlighter.sprite.move += 1
@@ -388,10 +380,20 @@ class Timer:
         highlighter.sprite.sounds = []
         self.start_time = 0
 
-    def terminate(self):
+    def reset(self, bpm = 1, subdivs = 1):
         if self.active:
-            global timer
-            timer = Timer(counters.sprites()[1].num, counters.sprites()[2].num)
+            # initialize
+            self.duration = 60 / bpm * 1000
+            self.sub_duration = self.duration / subdivs
+            self.start_time = pygame.time.get_ticks()
+            self.sub_iterator = 0
+            # pre-move sounds / chameleons
+            if len(buttons.sprites())>2:
+                if buttons.sprites()[4].status == 0:
+                    highlighter.sprite.chameleon()
+                if buttons.sprites()[5].status == 0:
+                    highlighter.sprite.rhythm_collisions()
+            highlighter.sprite.play_sounds()
 
     def update(self):
         current_time = pygame.time.get_ticks()
@@ -399,7 +401,7 @@ class Timer:
         if elapsed - (self.sub_duration * self.sub_iterator) >= self.sub_duration:
             self.subdivision()
         if elapsed >= self.duration:
-            self.terminate()
+            self.reset(counters.sprites()[1].num, counters.sprites()[2].num)
 timer = Timer()
 
 class SoundChanger(pygame.sprite.Sprite):
@@ -408,13 +410,17 @@ class SoundChanger(pygame.sprite.Sprite):
         self.image = pygame.image.load('images/soundChangeWheel.png').convert_alpha()
         self.rect = self.image.get_rect(center = pos)
         self.assocRhythm = assocRhythm
+        self.deathWish = 0
     
     def octant_check(self, pos):
+        print('octant check')
         radius = ((pos[0] - self.rect.centerx)**2 + (pos[1] - self.rect.centery)**2)**(1/2)
         if radius < 81:
             LR: int = pos[0] < self.rect.centerx   #left true, right false
-            UD: int = pos[1] > self.rect.centery   #down false, up true
-            hug: int = (pos[0])**2 > (pos[1])**2   #y-hug false, x-hug true
+            UD: int = pos[1] > self.rect.centery   #down true, up false
+            # y-hug false, x-hug true
+            hug: int = (pos[0]-self.rect.centerx)**2 > (pos[1]-self.rect.centery)**2   
+            print('LR: {0}, UD: {1}, hug: {2}'.format(LR, UD, hug))
             octant = 4*LR + 2*UD + hug
             self.assocRhythm.soundChange(octant)
 soundChanger = pygame.sprite.GroupSingle()
@@ -467,13 +473,11 @@ def update_all() -> None:
         update_rhythms(ctState, counters.sprites()[0].num)
     except IndexError: pass
     sprites.update()
-    if timer:    
-        if timer.active:
-            timer.update()
     sprites.draw(Display)
 
 def sprites_clicked(mouse_pos: tuple, mouse_buttons: tuple) -> None:
     try:
+        # handle sprite-click functions
         for x in range(0, len(sprites.sprites())):
             spr = sprites.sprites()
             if spr[x].rect.collidepoint(mouse_pos):
@@ -485,7 +489,6 @@ def sprites_clicked(mouse_pos: tuple, mouse_buttons: tuple) -> None:
                 elif spr[x] in homeButtons:
                     spr[x].click()
                 elif spr[x] in soundChanger:
-                    print('y')
                     spr[x].octant_check(mouse_pos)
                 elif spr[x] in rhythms:
                     pygame.mouse.get_rel()
@@ -507,6 +510,13 @@ def sprites_clicked(mouse_pos: tuple, mouse_buttons: tuple) -> None:
                 elif spr[x] in kernels:
                     pygame.mouse.get_rel()
                     clickedKernel.add(spr[x])
+       
+        # leave soundChanger up for 1 grace click before killing
+        if len(soundChanger.sprites()):
+            if soundChanger.sprite.deathWish == 0:
+                soundChanger.sprite.deathWish += 1
+            elif soundChanger.sprite.deathWish == 1:
+                soundChanger.sprite.kill()
     except IndexError: pass
     update_all()            
     
@@ -662,8 +672,7 @@ while True:
             mouse_buttons = pygame.mouse.get_pressed()
             # checking if present class instances were clicked
             sprites_clicked(mouse_pos, mouse_buttons)
-            if len(soundChanger.sprites()):
-                soundChanger.sprite.kill()
+            
 
         if event.type == MOUSEBUTTONUP:
             # unclicking buttons
