@@ -26,11 +26,12 @@ lastPlaybackClicked = 0
 ctState = 0
 coresAndTrivials = [cores,trivials]
 clock = pygame.time.Clock()
-loadedSound = pygame.mixer.Sound('sounds/bongo4_cymatics.wav')
+metronomeSound = pygame.mixer.Sound('sounds/metronome.wav')
 update_needed = False
 playbackClick = False
 upDownClick = False  #up/core = 0, down/trivial = 1
 updateNeeded = False
+spacedOut = False
 
 ### Colors and fonts init -------------------------------------
 BLACK = (0,0,0)
@@ -46,10 +47,12 @@ tinyFont = pygame.font.SysFont('Serif', 10)
 
 ### init for sound change wheel -------------------------------
 colors = [(236,146,48), (237,35,51), (207,102,205), (233,60,160),
-          (233,209,67), (144, 208, 68), (96,99,205), (109, 157, 205)]
-text = ['Snare', 'Kick', 'Ride', 'Hihat']
+          (233,209,67), (144, 208, 68), (96,99,205), (109, 157, 205), WHITE]
+text = ['Snare', 'Kick', 'Ride', 'Hihat', 'Clave', 'Cowbell', 'Shaker', 'Snap', 'Metronome']
 sounds = [pygame.mixer.Sound(x) for x in ('sounds/snare.wav','sounds/kick.wav',
-                                          'sounds/ride.wav','sounds/hihat.wav')]
+                                          'sounds/ride.wav','sounds/hihat.wav',
+                                          'sounds/clave.wav', 'sounds/cowbell.wav',
+                                          'sounds/shaker.wav', 'sounds/snap.wav')]
 
 ### classes and groups ----------------------------------------
 sprites = pygame.sprite.Group()
@@ -140,7 +143,10 @@ class Button(pygame.sprite.Sprite):
         elif self.type == 'mixer':
             if self.mixing == False:
                 mixables = []
-                
+                W = DropdownBox(8)
+                sprites.add(W)
+                sprites.add(W.slider)
+                dropdownBoxes.add(W)
                 for x in activeRhythms:
                     if x.sound not in mixables:
                         mixables.append(x.sound)
@@ -225,12 +231,12 @@ class ActiveRhythm(pygame.sprite.Sprite):
     def __init__(self, binary: str, pos: tuple) -> None:
         pygame.sprite.Sprite.__init__(self)
         self.binary = binary
-        self.image = Rhythm.rhythm_surface(binary)
+        self.sound = 0
+        self.image = Rhythm.rhythm_surface(binary, color = self.sound)
         self.rect = self.image.get_rect(center = pos)
         self.grid_pos = (round((self.rect.left - (disp_width / 3)) / 22) , 
                          round((self.rect.top - 100) / 44))
         self.move_bool = False
-        self.sound = 0
     
     def permutate(self) -> None:
         self.binary = self.binary[1:]+self.binary[0]
@@ -338,7 +344,7 @@ class Highlighter(pygame.sprite.Sprite):
     # turns highlighter red and plays sound
     def chameleon(self):
         self.image.fill((200, 0, 0))
-        self.sounds.append(loadedSound)
+        self.sounds.append(metronomeSound)
 
     def dechameleon(self):
         self.image.fill((200, 200, 0))
@@ -357,8 +363,8 @@ class Highlighter(pygame.sprite.Sprite):
     def play_sounds(self):
         if self.sounds:
             for x in self.sounds:
-                if x == loadedSound:
-                    pygame.mixer.Channel(13).play(x)
+                if x == metronomeSound:
+                    pygame.mixer.Channel(8).play(x)
                 else:
                     pygame.mixer.Channel(x).stop
                     pygame.mixer.Channel(x).play(sounds[x])
@@ -467,7 +473,10 @@ class DropdownBox(pygame.sprite.Sprite):
         pygame.draw.rect(self.image, (0,0,0), (0,0,205,43), 1)
         a = miniFont.render(text[self.sound], 1, BLACK)
         self.image.blit(a, (4,18))
-        pygame.draw.rect(self.image, (240,240,240), (60,21,100,4))
+        if self.sound == 8:
+            pygame.draw.rect(self.image, (240,240,240), (88,21,100,4))
+        else:
+            pygame.draw.rect(self.image, (240,240,240), (60,21,100,4))
         self.rect = self.image.get_rect(topright = (disp_width, self.y_pos))
 
     def positioning(self):
@@ -486,8 +495,11 @@ class Slider(pygame.sprite.Sprite):
         self.image = pygame.Surface((18,18))
         pygame.draw.rect(self.image, (250,250,250), (0,0,18,18))
         pygame.draw.rect(self.image, (170,170,170), (0,0,18,18), width = 2)
+        if self.sound < 8:
+            self.rect = self.image.get_rect(center = (disp_width - 145 + self.value, self.y_pos))
+        else:
+            self.rect = self.image.get_rect(center = (disp_width - 117 + self.value, self.y_pos))
         self.text_update()
-        self.rect = self.image.get_rect(center = (disp_width - 145 + self.value, self.y_pos))
 
     def text_update(self):
         pygame.draw.rect(self.image, (250,250,250), (0,0,18,18))
@@ -769,9 +781,19 @@ while True:
             if mode == 'sandbox':
                 if event.key == 32:
                     if timer.active:
-                        timer.deactivate()
+                        playbackButtons.sprites()[1].click()
+                        # timer.deactivate()
                     else:
-                        timer = Timer(counters.sprites()[1].num, counters.sprites()[2].num)
+                        playbackButtons.sprites()[0].click()
+                        # timer = Timer(counters.sprites()[1].num, counters.sprites()[2].num)
+                    spacedOut = True
+        if event.type == KEYUP:
+            if mode == 'sandbox':
+                if event.key == 32:
+                    if spacedOut == True:
+                        playbackButtons.sprites()[lastPlaybackClicked].click()
+                        spacedOut = False
+                        update_needed = True
 
         if event.type == MOUSEBUTTONDOWN:
             mouse_pos = pygame.mouse.get_pos()
