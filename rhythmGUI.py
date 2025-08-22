@@ -13,26 +13,24 @@ pygame.display.set_caption('The Rhythm Trainer')
 workingDisplay = pygame.Surface((disp_width,disp_height))
 workingDisplay.fill((120,130,130))
 sandboxBackdrop = pygame.Surface((disp_width,disp_height))
+pygame.mixer.set_num_channels(14)
 
 ### vars init ------------------------------------------------
 mode = 0
-updateNeeded = False
 rhyDotLen = 22
 rhythmIterator = 0
+subdivHighlighter = 0
 ghostIterator = [0]
-upDownClick = False  #up/core = 0, down/trivial = 1
 lastUpDownClicked = 0
-playbackClick = False
 lastPlaybackClicked = 0
 ctState = 0
 coresAndTrivials = [cores,trivials]
 clock = pygame.time.Clock()
 loadedSound = pygame.mixer.Sound('sounds/bongo4_cymatics.wav')
-# loadedSound2 = pygame.mixer.Sound('sounds/shaker6_cymatics.wav')
-sounds = [pygame.mixer.Sound(x) for x in ('sounds/snare.wav','sounds/kick.wav',
-                                          'sounds/ride.wav','sounds/hihat.wav')]
-subdivHighlighter = 0
 update_needed = False
+playbackClick = False
+upDownClick = False  #up/core = 0, down/trivial = 1
+updateNeeded = False
 
 ### Colors and fonts init -------------------------------------
 BLACK = (0,0,0)
@@ -44,8 +42,14 @@ homeFont = pygame.font.SysFont('Serif', 48)
 headerFont = pygame.font.SysFont('Serif',28)
 subHeaderFont = pygame.font.SysFont('Serif',22)
 miniFont = pygame.font.SysFont('Serif',16)
+tinyFont = pygame.font.SysFont('Serif', 10)
+
+### init for sound change wheel -------------------------------
 colors = [(236,146,48), (237,35,51), (207,102,205), (233,60,160),
           (233,209,67), (144, 208, 68), (96,99,205), (109, 157, 205)]
+text = ['Snare', 'Kick', 'Ride', 'Hihat']
+sounds = [pygame.mixer.Sound(x) for x in ('sounds/snare.wav','sounds/kick.wav',
+                                          'sounds/ride.wav','sounds/hihat.wav')]
 
 ### classes and groups ----------------------------------------
 sprites = pygame.sprite.Group()
@@ -68,6 +72,8 @@ class Button(pygame.sprite.Sprite):
                 self.status = 0
             self.image = pygame.image.load(self.graphics[self.status]).convert_alpha()
             self.rect = self.image.get_rect(topleft = pos)
+        if type == 'mixer':
+            self.mixing = False
         
     def click(self) -> None:   #toggle on/off 
         global ctState
@@ -130,6 +136,24 @@ class Button(pygame.sprite.Sprite):
                 print('guide screen')
             elif self.type[1] == 4:
                 print('settings screen')
+
+        elif self.type == 'mixer':
+            if self.mixing == False:
+                mixables = []
+                
+                for x in activeRhythms:
+                    if x.sound not in mixables:
+                        mixables.append(x.sound)
+                        W = DropdownBox(x.sound)
+                        sprites.add(W)
+                        sprites.add(W.slider)
+                        dropdownBoxes.add(W)
+                self.mixing = True
+            else:
+                for x in (dropdownBoxes.sprites(), sliders.sprites()):
+                    for y in x:
+                        y.kill()
+                self.mixing = False
 
     def update(self) -> None:
         if self.type[0] == 'CT':
@@ -325,16 +349,19 @@ class Highlighter(pygame.sprite.Sprite):
             for x in activeRhythms.sprites():
                 if self.rect.colliderect(x.rect):
                     highlighted_pos = self.grid_pos - x.grid_pos[0]
-                    print(self.grid_pos)
                     try:
                         if x.binary[highlighted_pos] == '1':
-                            self.sounds.append(sounds[x.sound])
+                            self.sounds.append(x.sound)
                     except IndexError: pass
 
     def play_sounds(self):
         if self.sounds:
             for x in self.sounds:
-                x.play()
+                if x == loadedSound:
+                    pygame.mixer.Channel(13).play(x)
+                else:
+                    pygame.mixer.Channel(x).stop
+                    pygame.mixer.Channel(x).play(sounds[x])
             self.sounds = []
 
     def reset(self):
@@ -404,9 +431,6 @@ class Timer:
             self.pulse(counters.sprites()[1].num, counters.sprites()[2].num)
         if self.AV:
             self.AV_update()
-        
-        
-
 timer = Timer()
 
 class SoundChanger(pygame.sprite.Sprite):
@@ -418,17 +442,74 @@ class SoundChanger(pygame.sprite.Sprite):
         self.deathWish = 0
     
     def octant_check(self, pos):
-        print('octant check')
         radius = ((pos[0] - self.rect.centerx)**2 + (pos[1] - self.rect.centery)**2)**(1/2)
         if radius < 81:
             LR: int = pos[0] < self.rect.centerx   #left true, right false
             UD: int = pos[1] > self.rect.centery   #down true, up false
             # y-hug false, x-hug true
             hug: int = (pos[0]-self.rect.centerx)**2 > (pos[1]-self.rect.centery)**2   
-            print('LR: {0}, UD: {1}, hug: {2}'.format(LR, UD, hug))
             octant = 4*LR + 2*UD + hug
             self.assocRhythm.soundChange(octant)
 soundChanger = pygame.sprite.GroupSingle()
+
+class DropdownBox(pygame.sprite.Sprite):
+    def __init__(self, sound: int):
+        pygame.sprite.Sprite.__init__(self)
+        self.sound = sound
+        self.image_and_rect()
+        self.slider = Slider(sound, self.rect.centery)
+        sliders.add(self.slider)
+
+    def image_and_rect(self):
+        self.positioning()
+        self.image = pygame.Surface((205, 43))
+        self.image.fill(colors[self.sound])
+        pygame.draw.rect(self.image, (0,0,0), (0,0,205,43), 1)
+        a = miniFont.render(text[self.sound], 1, BLACK)
+        self.image.blit(a, (4,18))
+        pygame.draw.rect(self.image, (240,240,240), (60,21,100,4))
+        self.rect = self.image.get_rect(topright = (disp_width, self.y_pos))
+
+    def positioning(self):
+        self.y_pos = 101 + 44 * len(dropdownBoxes.sprites()) 
+dropdownBoxes = pygame.sprite.Group()
+
+class Slider(pygame.sprite.Sprite):
+    def __init__(self, sound, y_pos):
+        pygame.sprite.Sprite.__init__(self)
+        self.sound = sound
+        self.y_pos = y_pos
+        self.value = int(pygame.mixer.Channel(self.sound).get_volume() * 100)
+        self.image_and_rect()
+        
+    def image_and_rect(self):    
+        self.image = pygame.Surface((18,18))
+        pygame.draw.rect(self.image, (250,250,250), (0,0,18,18))
+        pygame.draw.rect(self.image, (170,170,170), (0,0,18,18), width = 2)
+        self.text_update()
+        self.rect = self.image.get_rect(center = (disp_width - 145 + self.value, self.y_pos))
+
+    def text_update(self):
+        pygame.draw.rect(self.image, (250,250,250), (0,0,18,18))
+        pygame.draw.rect(self.image, (170,170,170), (0,0,18,18), width = 2)
+        self.text = str(self.value)
+        if len(self.text) < 3:
+            self.image.blit(tinyFont.render(self.text, 1, BLACK),(4,4))
+        else:
+            self.image.blit(tinyFont.render(self.text, 1, BLACK),(1,4))
+
+    def move(self, rel):
+        if self.value + rel > 100:
+            self.value = 100
+        elif self.value + rel < 0:
+            self.value = 0
+        else:
+            self.rect.move_ip(rel, 0)
+            self.value += rel
+        pygame.mixer.Channel(self.sound).set_volume(self.value / 100)
+        self.text_update()
+sliders = pygame.sprite.Group()
+clickedSlider = pygame.sprite.GroupSingle()
 
 ### global functions -----------------------------------------
 def top_menu_init():
@@ -502,19 +583,34 @@ def sprites_clicked(mouse_pos: tuple, mouse_buttons: tuple) -> None:
                     pickedUpRhythm.add(new_rhythm)
                     sprites.add(new_rhythm)
                 elif spr[x] in activeRhythms:
-                    if mouse_buttons[0] == True:
-                        pygame.mouse.get_rel()
-                        pickedUpRhythm.add(spr[x])
-                    elif mouse_buttons[2] == True:
-                        wheel = SoundChanger(mouse_pos, spr[x])
-                        soundChanger.add(wheel)
-                        sprites.add(wheel)
+                    if soundChanger.sprites():
+                        if soundChanger.sprite.rect.collidepoint(mouse_pos):
+                            soundChanger.sprite.octant_check(mouse_pos)
+                        else:
+                            if mouse_buttons[0] == True:
+                                pygame.mouse.get_rel()
+                                pickedUpRhythm.add(spr[x])
+                            elif mouse_buttons[2] == True:
+                                wheel = SoundChanger(mouse_pos, spr[x])
+                                soundChanger.add(wheel)
+                                sprites.add(wheel)
+                    else:
+                        if mouse_buttons[0] == True:
+                                pygame.mouse.get_rel()
+                                pickedUpRhythm.add(spr[x])
+                        elif mouse_buttons[2] == True:
+                            wheel = SoundChanger(mouse_pos, spr[x])
+                            soundChanger.add(wheel)
+                            sprites.add(wheel)
                 elif spr[x] in draggers:
                     pygame.mouse.get_rel()
                     clickedDragger.add(spr[x])
                 elif spr[x] in kernels:
                     pygame.mouse.get_rel()
                     clickedKernel.add(spr[x])
+                elif spr[x] in sliders:
+                    pygame.mouse.get_rel()
+                    clickedSlider.add(spr[x])
        
         # leave soundChanger up for 1 grace click before killing
         if len(soundChanger.sprites()):
@@ -612,6 +708,9 @@ def sandbox_init() -> None:
 
     highlighter.add(Highlighter())
 
+    buttons.add(Button(['images/mixer_button_unpressed.png', 'images/mixer_button_pressed.png',],
+                       (disp_width-100,72),('mixer')))
+    
     Display.blit(workingDisplay,(0,0))
     
     spritify()
@@ -632,18 +731,16 @@ pygame.display.update()
 
 ### game loop ------------------------------------------------
 while True:
-
+    # update timer if it's active
     if timer:
         if timer.active:
             timer.update()
-
     # picking up rhythms
     if len(pickedUpRhythm.sprites()):
         rel = pygame.mouse.get_rel()
         if rel[0]+rel[1]:
             pickedUpRhythm.sprite.move(rel)
         update_needed = True
-
     # dragging draggers
     if len(clickedDragger.sprites()):
         rel = pygame.mouse.get_rel()
@@ -652,25 +749,29 @@ while True:
         if rel[1] > 0:
             clickedDragger.update('down')
         update_needed = True
-
     # moving kernels
     if len(clickedKernel.sprites()):
         rel = pygame.mouse.get_rel()
         clickedKernel.sprite.move(rel[0])
         update_needed = True
-
-
+    # sliding sliders
+    if len(clickedSlider.sprites()):
+        rel = pygame.mouse.get_rel()
+        clickedSlider.sprite.move(rel[0])
+        update_needed = True
+    
     for event in pygame.event.get():
         if event.type == QUIT:
             pygame.quit()
             sys.exit()
 
-        # if event.type == KEYDOWN:
-        #     if event.key == 32:
-        #         if playing == True:
-        #             playing = 'paused'
-        #         else:
-        #             playing = True
+        if event.type == KEYDOWN:
+            if mode == 'sandbox':
+                if event.key == 32:
+                    if timer.active:
+                        timer.deactivate()
+                    else:
+                        timer = Timer(counters.sprites()[1].num, counters.sprites()[2].num)
 
         if event.type == MOUSEBUTTONDOWN:
             mouse_pos = pygame.mouse.get_pos()
@@ -712,19 +813,21 @@ while True:
                     pur.add(activeRhythms)
                 pickedUpRhythm.empty()
                 update_needed = True
-            
             # dropping dragger
             if len(clickedDragger.sprites()):
                 Display.blit(workingDisplay, (0,0))
                 clickedDragger.empty()
                 update_needed = True
-
             # dropping kernel
             if len(clickedKernel.sprites()):
                 clickedKernel.sprite.snap()
                 clickedKernel.empty()
                 update_needed = True
-
+            # dropping slider
+            if len(clickedSlider.sprites()):
+                clickedSlider.empty()
+                update_needed = True
+    
     if update_needed:
         update_all()
         update_needed = False
