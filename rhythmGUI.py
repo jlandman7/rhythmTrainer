@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 import pygame, sys
 from pygame.locals import *
-import matrixGen3
 from matrixGen3 import data, cores, trivials
 
 ### display init ---------------------------------------------
@@ -10,9 +9,9 @@ disp_width = 1300
 disp_height = 800
 Display = pygame.display.set_mode((disp_width, disp_height),0,32)
 pygame.display.set_caption('The Rhythm Trainer')
-workingDisplay = pygame.Surface((disp_width,disp_height))
+workingDisplay = pygame.Surface((disp_width,disp_height), SRCALPHA)
 workingDisplay.fill((120,130,130))
-sandboxBackdrop = pygame.Surface((disp_width,disp_height))
+sandboxBackdrop = pygame.Surface((disp_width,disp_height), SRCALPHA)
 pygame.mixer.set_num_channels(14)
 
 ### vars init ------------------------------------------------
@@ -72,6 +71,8 @@ class Button(pygame.sprite.Sprite):
             if self.type[0] == 'CT':
                 self.status = ctState
             else:
+                self.status = 0
+            if self.type == 'clear':
                 self.status = 0
             self.image = pygame.image.load(self.graphics[self.status]).convert_alpha()
             self.rect = self.image.get_rect(topleft = pos)
@@ -161,6 +162,19 @@ class Button(pygame.sprite.Sprite):
                         y.kill()
                 self.mixing = False
 
+        elif self.type == 'clear':
+            if self.status == 0:
+                for x in activeRhythms:
+                    x.kill()
+                activeRhythms.empty()
+                buttons.sprites()[6].click()
+                buttons.sprites()[6].click()
+                self.status = 1
+            else:
+                self.status = 0
+            self.image = pygame.image.load(self.graphics[self.status]).convert_alpha()
+            
+            
     def update(self) -> None:
         if self.type[0] == 'CT':
             self.status = ctState
@@ -232,15 +246,20 @@ class ActiveRhythm(pygame.sprite.Sprite):
         pygame.sprite.Sprite.__init__(self)
         self.binary = binary
         self.sound = 0
-        self.image = Rhythm.rhythm_surface(binary, color = self.sound)
+        self.update_image()
         self.rect = self.image.get_rect(center = pos)
         self.grid_pos = (round((self.rect.left - (disp_width / 3)) / 22) , 
                          round((self.rect.top - 100) / 44))
         self.move_bool = False
     
+    def update_image(self) -> pygame.Surface:
+        self.image = Rhythm.rhythm_surface(self.binary, color = self.sound)
+        if self in pickedUpRhythms.sprites():
+            pygame.draw.rect(self.image, (255,255,255), (0,0,self.image.get_width(), self.image.get_height()), 1)
+
     def permutate(self) -> None:
         self.binary = self.binary[1:]+self.binary[0]
-        self.image = Rhythm.rhythm_surface(self.binary, color = self.sound)
+        self.update_image()
 
     def move(self, rel: tuple) -> None:
         self.rect = self.rect.move((rel[0], rel[1]))
@@ -248,7 +267,9 @@ class ActiveRhythm(pygame.sprite.Sprite):
 
     def soundChange(self, newSound: int):
         self.sound = newSound
-        self.image = Rhythm.rhythm_surface(self.binary, color = self.sound)
+        self.update_image()
+        buttons.sprites()[6].click()
+        buttons.sprites()[6].click()
 
     def snap(self) -> None:
         pos = self.rect.topleft
@@ -259,6 +280,7 @@ class ActiveRhythm(pygame.sprite.Sprite):
                          round((self.rect.top - 100) / 44))
 activeRhythms = pygame.sprite.Group()
 pickedUpRhythm = pygame.sprite.GroupSingle()
+pickedUpRhythms = pygame.sprite.Group()
 
 class Dragger(pygame.sprite.Sprite):
     def __init__(self,  pos: tuple, type: str) -> None:
@@ -318,7 +340,7 @@ class Kernel(pygame.sprite.Sprite):
     def snap(self) -> None:
         snap_by = (self.rect.left - disp_width / 3) % 22
         if self.LR == 'left' and self.rect.left - snap_by > disp_width / 3:
-            self.rect.move_ip(-snap_by - 2,0)
+            self.rect.move_ip(-snap_by - 3,0)
         elif self.LR == 'right':
             self.rect.move_ip(22-snap_by,0)
         self.rect.move_ip(-(self.rect.left - disp_width / 3) % 22 - 2, 0)
@@ -421,7 +443,6 @@ class Timer:
                 highlighter.sprite.chameleon()
             self.AV = True
 
-
     def AV_update(self):
         highlighter.sprite.reset()
         global update_needed
@@ -444,6 +465,7 @@ class SoundChanger(pygame.sprite.Sprite):
         pygame.sprite.Sprite.__init__(self)
         self.image = pygame.image.load('images/soundChangeWheel.png').convert_alpha()
         self.rect = self.image.get_rect(center = pos)
+        self.mask = pygame.mask.from_surface(self.image)
         self.assocRhythm = assocRhythm
         self.deathWish = 0
     
@@ -523,6 +545,59 @@ class Slider(pygame.sprite.Sprite):
 sliders = pygame.sprite.Group()
 clickedSlider = pygame.sprite.GroupSingle()
 
+class SelectionBox(pygame.sprite.Sprite):
+    def __init__(self, start_pos: tuple, end_pos: tuple):
+        pygame.sprite.Sprite.__init__(self)
+        self.start_pos = start_pos
+        width = abs(start_pos[0] - end_pos[0])
+        height = abs(start_pos[1] - end_pos[1])
+        self.image = pygame.Surface((width, height), SRCALPHA)
+        self.image.fill((230,230,230,0.1))
+        pygame.draw.rect(self.image, (100,100,255,100), (0,0,width,height))
+        pygame.draw.rect(self.image, (0,0,255,250), (0,0,width,height), 2)
+        self.rect = self.image.get_rect(topleft = (self.start_pos[0], self.start_pos[1]))
+    
+    def clean_mouse_pos(self, mouse_pos: tuple) -> tuple:
+        if mouse_pos_in_workspace():
+            return mouse_pos
+        else:
+            x = min(max(mouse_pos[0], disp_width/3 + 2), disp_width - 2)
+            y = min(max(mouse_pos[1], 100 + 1), disp_height - 2)
+            return (x,y)
+
+    def expand(self, new_end_pos: tuple) -> None:
+        new_end_pos = self.clean_mouse_pos(new_end_pos)
+        left = min(self.start_pos[0], new_end_pos[0])
+        top = min(self.start_pos[1], new_end_pos[1])
+        width = abs(self.start_pos[0] - new_end_pos[0])
+        height = abs(self.start_pos[1] - new_end_pos[1])
+        self.image = pygame.Surface((width, height), SRCALPHA)
+        self.image.fill((230,230,230,0.1))
+        pygame.draw.rect(self.image, (100,100,255,100), (0,0,width,height))
+        pygame.draw.rect(self.image, (0,0,255,250), (0,0,width,height), 2)
+        self.rect = self.image.get_rect(topleft = (left, top))
+
+    def finalize(self) -> None:
+        """
+        On mouse release, check for collisions with active rhythms.
+        Empty pickedUpRhythms group, update images of previously picked up rhythms.
+        Add any colliding rhythms to pickedUpRhythms group and update their images.
+        """
+        selected_rhythms = pygame.sprite.Group()
+        previously_selected = pickedUpRhythms.sprites()
+        pickedUpRhythms.empty()
+        for x in activeRhythms.sprites():
+            if self.rect.colliderect(x.rect):
+                selected_rhythms.add(x)
+        for x in selected_rhythms.sprites():
+            pickedUpRhythms.add(x)
+            x.update_image()
+        for x in previously_selected:
+            x.update_image()
+        
+        self.kill()
+selectionBox = pygame.sprite.GroupSingle()
+
 ### global functions -----------------------------------------
 def top_menu_init():
     top_menu_data = [(' Rhythm Trainer ', (disp_width/2), ('home', 0)), 
@@ -576,6 +651,7 @@ def update_all() -> None:
 def sprites_clicked(mouse_pos: tuple, mouse_buttons: tuple) -> None:
     try:
         # handle sprite-click functions
+        unclicked = 0
         for x in range(0, len(sprites.sprites())):
             spr = sprites.sprites()
             if spr[x].rect.collidepoint(mouse_pos):
@@ -623,6 +699,15 @@ def sprites_clicked(mouse_pos: tuple, mouse_buttons: tuple) -> None:
                 elif spr[x] in sliders:
                     pygame.mouse.get_rel()
                     clickedSlider.add(spr[x])
+            else:
+                unclicked += 1
+            
+            # start selection box if not clicking on any sprite
+            if mode == "sandbox" and mouse_pos_in_workspace() and unclicked == len(sprites.sprites()):
+                newSelectionBox = SelectionBox(mouse_pos, mouse_pos)
+                selectionBox.add(newSelectionBox)
+                sprites.add(newSelectionBox)
+                print('selection box started')
        
         # leave soundChanger up for 1 grace click before killing
         if len(soundChanger.sprites()):
@@ -722,7 +807,8 @@ def sandbox_init() -> None:
 
     buttons.add(Button(['images/mixer_button_unpressed.png', 'images/mixer_button_pressed.png',],
                        (disp_width-100,72),('mixer')))
-    
+    buttons.add(Button(['images/clear_button_unpressed.png', 'images/clear_button_pressed.png'],
+                       (disp_width-34,72),('clear')))
     Display.blit(workingDisplay,(0,0))
     
     spritify()
@@ -733,6 +819,13 @@ def spritify() -> None:
     for x in classes:
         for j in range(0, len(x.sprites())):
             sprites.add(x.sprites()[j])
+
+def mouse_pos_in_workspace() -> bool:
+    mouse_pos = pygame.mouse.get_pos()
+    if mouse_pos[0] > disp_width/3 and mouse_pos[1] > 100:
+        return True
+    else:
+        return False
 
 ### init display ---------------------------------------------
 top_menu_init()
@@ -782,11 +875,11 @@ while True:
                 if event.key == 32:
                     if timer.active:
                         playbackButtons.sprites()[1].click()
-                        # timer.deactivate()
                     else:
                         playbackButtons.sprites()[0].click()
-                        # timer = Timer(counters.sprites()[1].num, counters.sprites()[2].num)
                     spacedOut = True
+                    update_needed = True
+
         if event.type == KEYUP:
             if mode == 'sandbox':
                 if event.key == 32:
@@ -800,7 +893,13 @@ while True:
             mouse_buttons = pygame.mouse.get_pressed()
             # checking if present class instances were clicked
             sprites_clicked(mouse_pos, mouse_buttons)
-            
+
+        if event.type == MOUSEMOTION:
+            mouse_pos = pygame.mouse.get_pos()
+            # updating selection box
+            if len(selectionBox.sprites()) > 0:
+                selectionBox.sprites()[0].expand(mouse_pos)
+                update_needed = True
 
         if event.type == MOUSEBUTTONUP:
             # unclicking buttons
@@ -811,7 +910,18 @@ while True:
                 playbackButtons.sprites()[lastPlaybackClicked].click()
                 playbackClick = False
                 update_needed = True
+            try:
+                # clear button
+                if buttons.sprites()[7].status == 1: 
+                    buttons.sprites()[7].click()
+                    update_needed = True
+            except IndexError: pass
 
+            # finalizing selection box
+            if len(selectionBox.sprites()) > 0:
+                selectionBox.sprites()[0].finalize()
+                update_needed = True
+            
             # dropping rhythms
             if len(pickedUpRhythm.sprites()):
                 Display.blit(workingDisplay,(0,0))
@@ -834,17 +944,22 @@ while True:
                 if killed == False:
                     pur.add(activeRhythms)
                 pickedUpRhythm.empty()
+                buttons.sprites()[6].click()
+                buttons.sprites()[6].click()
                 update_needed = True
+            
             # dropping dragger
             if len(clickedDragger.sprites()):
                 Display.blit(workingDisplay, (0,0))
                 clickedDragger.empty()
                 update_needed = True
+            
             # dropping kernel
             if len(clickedKernel.sprites()):
                 clickedKernel.sprite.snap()
                 clickedKernel.empty()
                 update_needed = True
+            
             # dropping slider
             if len(clickedSlider.sprites()):
                 clickedSlider.empty()
