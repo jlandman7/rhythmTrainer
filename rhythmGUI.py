@@ -263,6 +263,7 @@ class ActiveRhythm(pygame.sprite.Sprite):
         self.grid_pos = (round((self.rect.left - (disp_width / 3)) / 22), 
                          round((self.rect.top - 100) / 44))
         self.move_bool = False
+        self.relative_grid_pos = (0,0)
     
     def update_image(self) -> pygame.Surface:
         self.image = Rhythm.rhythm_surface(self.binary, color = self.sound)
@@ -288,6 +289,9 @@ class ActiveRhythm(pygame.sprite.Sprite):
                     pygame.draw.circle(rhy_surf, BLACK, (rhyDotLen*j+11,32), 10, 2)
             self.image = rhy_surf
 
+    def update(self) -> None:
+        self.update_image() # whoops, can be cleaned up later
+
     def permutate(self) -> None:
         if soundChanger.sprite is None:    
             if not self.decoupled:
@@ -303,7 +307,7 @@ class ActiveRhythm(pygame.sprite.Sprite):
         self.rect = self.rect.move((rel[0], rel[1]))
         self.move_bool = True
 
-    def soundChange(self, newSound: int):
+    def soundChange(self, newSound: int) -> None:
         self.sound = newSound
         self.update_image()
         buttons.sprites()[6].click() # refresh mixer
@@ -696,6 +700,8 @@ class SelectionBox(pygame.sprite.Sprite):
         """
         selected_rhythms = pygame.sprite.Group()
         previously_selected = selectedRhythms.sprites()
+        for x in selectedRhythms.sprites():
+            x.relative_grid_pos = (0,0)
         selectedRhythms.empty()
         for x in activeRhythms.sprites():
             if self.rect.colliderect(x.rect):
@@ -832,7 +838,7 @@ def sandbox_init() -> None:
     toolkit_surf.fill((60,60,60))
     toolkit_rect = toolkit_surf.get_rect(topleft = (0,70))
     workingDisplay.blit(toolkit_surf, toolkit_rect)
-    toolkit_text = headerFont.render(' Toolkit ', True, ORANGE)
+    toolkit_text = headerFont.render(' Toolkit ', True, ORANGE, (45,45,45))
     toolkit_text_rect = toolkit_text.get_rect(center = (disp_width/6,86))
     workingDisplay.blit(toolkit_text,toolkit_text_rect)
     workspace_surf = pygame.Surface((disp_width*2/3-2,disp_height-71))
@@ -941,6 +947,7 @@ pygame.display.update()
 
 ### game loop ------------------------------------------------
 while True:
+   
     # update timer if it's active
     if timer:
         if timer.active:
@@ -950,12 +957,6 @@ while True:
         rel = pygame.mouse.get_rel()
         if rel[0]+rel[1]:
             pickedUpRhythm.sprite.move(rel)
-        update_needed = True
-    if len(selectedRhythms.sprites()):
-        rel = pygame.mouse.get_rel()
-        if rel[0]+rel[1]:
-            for x in selectedRhythms.sprites():
-                x.move(rel)
         update_needed = True
     # dragging draggers
     if len(clickedDragger.sprites()):
@@ -975,15 +976,16 @@ while True:
         rel = pygame.mouse.get_rel()
         clickedSlider.sprite.move(rel[0])
         update_needed = True
-    
+
     for event in pygame.event.get():
+        
         if event.type == QUIT:
             pygame.quit()
             sys.exit()
 
         if event.type == KEYDOWN:
             if mode == 'sandbox':
-                if event.key == 32:
+                if event.key == K_SPACE:
                     if timer.active:
                         playbackButtons.sprites()[1].click()
                     else:
@@ -992,6 +994,8 @@ while True:
                     update_needed = True
 
                 if event.key == K_DELETE or event.key == K_BACKSPACE:
+                    for x in selectedRhythms.sprites():
+                        x.relative_grid_pos = (0,0)
                     selectedRhythms.empty()
                     buttons.sprites()[6].click()
                     buttons.sprites()[6].click()
@@ -1000,33 +1004,72 @@ while True:
                 if event.key == K_c:
                     if pygame.key.get_mods() & KMOD_CTRL:
                         clipboardRhythms.empty()
+
+                        # prepare relative positions
+                        min_left_grid = 1000
+                        min_top_grid = 1000
                         for x in selectedRhythms.sprites():
+                            if x.grid_pos[0] < min_left_grid:
+                                min_left_grid = x.grid_pos[0]
+                            if x.grid_pos[1] < min_top_grid:
+                                min_top_grid = x.grid_pos[1]
+                        for x in selectedRhythms.sprites():
+                            x.relative_grid_pos = (x.grid_pos[0] - min_left_grid, x.grid_pos[1] - min_top_grid)
+                        
+                        # copy rhythms to clipboardRhythms
+                        for x in selectedRhythms.sprites():
+                            print("sound of rhythm being copied:", x.sound)
                             clip_rhy = ActiveRhythm(x.binary, (x.rect.center))
                             clip_rhy.sound = x.sound
+                            clip_rhy.relative_grid_pos = x.relative_grid_pos
                             if x.decoupled:
                                 clip_rhy.decoupled = True
                                 clip_rhy.decoupled_sounds = x.decoupled_sounds.copy()
+                                clip_rhy.update_image()
                             clipboardRhythms.add(clip_rhy)
                         print('copied')
                 
                 if event.key == K_v:
                     if pygame.key.get_mods() & KMOD_CTRL:
-                        Display.blit(workingDisplay,(0,0))
-                        offset_x = pygame.mouse.get_pos()[0] - clipboardRhythms.sprites()[0].rect.left
-                        offset_y = pygame.mouse.get_pos()[1] - clipboardRhythms.sprites()[0].rect.top
                         for x in clipboardRhythms.sprites():
-                            new_rhy = ActiveRhythm(x.binary, (x.rect.left + offset, x.rect.top + offset))
-                            new_rhy.sound = x.sound
+                            killed = False
+                            
+                            # create copy rhythm
+                            new_rhythm = ActiveRhythm(x.binary, (x.rect.center))
+                            print('location of rhythm being pasted:', x.rect.topleft)
+                            new_rhythm.sound = x.sound
+                            new_rhythm.relative_grid_pos = x.relative_grid_pos
                             if x.decoupled:
-                                new_rhy.decoupled = True
-                                new_rhy.decoupled_sounds = x.decoupled_sounds.copy()
-                            activeRhythms.add(new_rhy)
-                            sprites.add(new_rhy)
-                            selectedRhythms.add(new_rhy)
-                            offset += 10
+                                new_rhythm.decoupled = True
+                                new_rhythm.decoupled_sounds = x.decoupled_sounds.copy()
+                                new_rhythm.update_image()
+
+                            # position according to mouse
+                            mouse_pos = pygame.mouse.get_pos()
+                            new_rhythm.rect.topleft = (mouse_pos[0] + new_rhythm.relative_grid_pos[0]*22,
+                                       mouse_pos[1] + new_rhythm.relative_grid_pos[1]*44)
+                            print('pasting at:', new_rhythm.rect.topleft)
+                            new_rhythm.snap()
+
+                            # determine if valid location
+                            if new_rhythm.rect.left < disp_width/3 or new_rhythm.rect.top < 100 or new_rhythm.rect.centery > disp_height - 2*rhyDotLen or new_rhythm.rect.right > disp_width + 2:
+                                new_rhythm.kill()
+                                killed = True
+                            for y in activeRhythms.sprites():
+                                if y.rect.colliderect(new_rhythm.rect):
+                                    new_rhythm.kill()
+                                    killed = True
+                           
+                            if killed:
+                                print('killed on paste')
+                            if not killed:
+                                activeRhythms.add(new_rhythm)
+                                selectedRhythms.add(new_rhythm)
+                                sprites.add(new_rhythm)
+                        buttons.sprites()[6].click()
+                        buttons.sprites()[6].click()
                         update_needed = True
                         print('pasted')
-
 
         if event.type == KEYUP:
             if mode == 'sandbox':
