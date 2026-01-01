@@ -260,8 +260,36 @@ class ActiveRhythm(pygame.sprite.Sprite):
             pygame.draw.rect(self.image, (255,255,255), (0,0,self.image.get_width(), self.image.get_height()), 1)
 
     def permutate(self) -> None:
-        self.binary = self.binary[1:]+self.binary[0]
-        self.update_image()
+        if not self.decouple:
+            self.binary = self.binary[1:]+self.binary[0]
+            self.update_image()
+        else:
+            if self.binary[0] == "1":
+                self.decoupled_sounds = self.decoupled_sounds[1:] + [self.decoupled_sounds[0]]
+            
+            self.binary = self.binary[1:]+self.binary[0]
+            w = 0
+            rhy_surf = pygame.Surface((w, 2*rhyDotLen-1))
+            rhy_surf.fill(WHITE)
+            sound_iterator = 0
+            temp_color = colors[self.decoupled_sounds[sound_iterator]]
+            print("Decoupling rhythm with sound ", temp_color)
+            for j in range(0,len(self.binary)):
+                if self.binary[j] == "1":
+                    w += rhyDotLen
+                    temp = rhy_surf
+                    rhy_surf = pygame.Surface((w, 2*rhyDotLen-1))
+                    rhy_surf.fill(WHITE)
+                    rhy_surf.blit(temp, (0,0))
+                    pygame.draw.circle(rhy_surf, temp_color, (rhyDotLen*j+11,11), 10)
+                elif self.binary[j] == "0":
+                    w += rhyDotLen
+                    temp = rhy_surf
+                    rhy_surf = pygame.Surface((w, 2*rhyDotLen-1))
+                    rhy_surf.fill(WHITE)
+                    rhy_surf.blit(temp, (0,0))
+                    pygame.draw.circle(rhy_surf, BLACK, (rhyDotLen*j+11,32), 10, 2)
+            self.image = rhy_surf
 
     def move(self, rel: tuple) -> None:
         self.rect = self.rect.move((rel[0], rel[1]))
@@ -301,7 +329,7 @@ class ActiveRhythm(pygame.sprite.Sprite):
                 rhy_surf = pygame.Surface((w, 2*rhyDotLen-1))
                 rhy_surf.fill(WHITE)
                 rhy_surf.blit(temp, (0,0))
-                pygame.draw.circle(rhy_surf, temp_sound, (rhyDotLen*j+11,11), 10)
+                pygame.draw.circle(rhy_surf, colors[temp_sound], (rhyDotLen*j+11,11), 10)
             elif self.binary[j] == "0":
                 w += rhyDotLen
                 temp = rhy_surf
@@ -310,6 +338,9 @@ class ActiveRhythm(pygame.sprite.Sprite):
                 rhy_surf.blit(temp, (0,0))
                 pygame.draw.circle(rhy_surf, BLACK, (rhyDotLen*j+11,32), 10, 2)
 
+        for j in range(0,len(self.binary)):
+            if self.binary[j] == "1":
+                self.decoupled_sounds.append(temp_sound)
         
         self.image = rhy_surf
         self.sound = 8
@@ -534,6 +565,7 @@ class SoundChanger(pygame.sprite.Sprite):
             self.assocRhythm.soundChange(octant)
         elif radius <= 14:
             self.assocRhythm.decouple()
+        self.kill()
 
 soundChanger = pygame.sprite.GroupSingle()
 
@@ -765,13 +797,6 @@ def sprites_clicked(mouse_pos: tuple, mouse_buttons: tuple) -> None:
                 selectionBox.add(newSelectionBox)
                 sprites.add(newSelectionBox)
                 print('selection box started')
-       
-        # leave soundChanger up for 1 grace click before killing
-        if len(soundChanger.sprites()):
-            if soundChanger.sprite.deathWish == 0:
-                soundChanger.sprite.deathWish += 1
-            elif soundChanger.sprite.deathWish == 1:
-                soundChanger.sprite.kill()
     except IndexError: pass
     update_all()            
     
