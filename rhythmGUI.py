@@ -820,12 +820,16 @@ def sprites_clicked(mouse_pos: tuple, mouse_buttons: tuple) -> None:
             
             # start selection box if not clicking on any sprite
             if mode == "sandbox" and mouse_pos_in_workspace() and unclicked == len(sprites.sprites()):
-                if soundChanger.sprites():
-                    soundChanger.sprite.octant_check(mouse_pos)
+                if mouse_buttons[2] == True:
+                    # clipboard dropdown
+                    pass
                 else:
-                    newSelectionBox = SelectionBox(mouse_pos, mouse_pos)
-                    selectionBox.add(newSelectionBox)
-                    sprites.add(newSelectionBox)
+                    if soundChanger.sprites():
+                        soundChanger.sprite.octant_check(mouse_pos)
+                    else:
+                        newSelectionBox = SelectionBox(mouse_pos, mouse_pos)
+                        selectionBox.add(newSelectionBox)
+                        sprites.add(newSelectionBox)
     except IndexError: pass
     update_all()
 
@@ -956,7 +960,11 @@ while True:
     if len(pickedUpRhythm.sprites()):
         rel = pygame.mouse.get_rel()
         if rel[0]+rel[1]:
-            pickedUpRhythm.sprite.move(rel)
+            if pickedUpRhythm.sprite in selectedRhythms:
+                for x in selectedRhythms.sprites():
+                    x.move(rel)
+            else:
+                pickedUpRhythm.sprite.move(rel)
         update_needed = True
     # dragging draggers
     if len(clickedDragger.sprites()):
@@ -985,7 +993,7 @@ while True:
 
         if event.type == KEYDOWN:
             if mode == 'sandbox':
-                if event.key == K_SPACE:
+                if event.key == K_SPACE: # play/pause toggle
                     if timer.active:
                         playbackButtons.sprites()[1].click()
                     else:
@@ -993,32 +1001,32 @@ while True:
                     spacedOut = True
                     update_needed = True
 
-                if event.key == K_DELETE or event.key == K_BACKSPACE:
+                if event.key == K_DELETE or event.key == K_BACKSPACE: # delete selected rhythms
                     for x in selectedRhythms.sprites():
-                        x.relative_grid_pos = (0,0)
-                    selectedRhythms.empty()
+                        x.kill()
                     buttons.sprites()[6].click()
                     buttons.sprites()[6].click()
                     update_needed = True
                 
-                if event.key == K_c:
+                if event.key == K_c: # copy selected rhythms (ctrl + c)
                     if pygame.key.get_mods() & KMOD_CTRL:
                         clipboardRhythms.empty()
 
                         # prepare relative positions
                         min_left_grid = 1000
-                        min_top_grid = 1000
+                        slave_top_grid = 1000
                         for x in selectedRhythms.sprites():
                             if x.grid_pos[0] < min_left_grid:
                                 min_left_grid = x.grid_pos[0]
-                            if x.grid_pos[1] < min_top_grid:
-                                min_top_grid = x.grid_pos[1]
+                                slave_top_grid = x.grid_pos[1]
+                            elif x.grid_pos[0] == min_left_grid:
+                                if x.grid_pos[1] < slave_top_grid:
+                                    slave_top_grid = x.grid_pos[1]
                         for x in selectedRhythms.sprites():
-                            x.relative_grid_pos = (x.grid_pos[0] - min_left_grid, x.grid_pos[1] - min_top_grid)
-                        
+                            x.relative_grid_pos = (x.grid_pos[0] - min_left_grid, x.grid_pos[1] - slave_top_grid)
+
                         # copy rhythms to clipboardRhythms
                         for x in selectedRhythms.sprites():
-                            print("sound of rhythm being copied:", x.sound)
                             clip_rhy = ActiveRhythm(x.binary, (x.rect.center))
                             clip_rhy.sound = x.sound
                             clip_rhy.relative_grid_pos = x.relative_grid_pos
@@ -1027,16 +1035,14 @@ while True:
                                 clip_rhy.decoupled_sounds = x.decoupled_sounds.copy()
                                 clip_rhy.update_image()
                             clipboardRhythms.add(clip_rhy)
-                        print('copied')
                 
-                if event.key == K_v:
+                if event.key == K_v: # paste copied rhythms (ctrl + v)
                     if pygame.key.get_mods() & KMOD_CTRL:
                         for x in clipboardRhythms.sprites():
                             killed = False
                             
                             # create copy rhythm
                             new_rhythm = ActiveRhythm(x.binary, (x.rect.center))
-                            print('location of rhythm being pasted:', x.rect.topleft)
                             new_rhythm.sound = x.sound
                             new_rhythm.relative_grid_pos = x.relative_grid_pos
                             if x.decoupled:
@@ -1048,7 +1054,6 @@ while True:
                             mouse_pos = pygame.mouse.get_pos()
                             new_rhythm.rect.topleft = (mouse_pos[0] + new_rhythm.relative_grid_pos[0]*22,
                                        mouse_pos[1] + new_rhythm.relative_grid_pos[1]*44)
-                            print('pasting at:', new_rhythm.rect.topleft)
                             new_rhythm.snap()
 
                             # determine if valid location
@@ -1059,9 +1064,8 @@ while True:
                                 if y.rect.colliderect(new_rhythm.rect):
                                     new_rhythm.kill()
                                     killed = True
-                           
-                            if killed:
-                                print('killed on paste')
+                            
+                            # add to activeRhythms if valid
                             if not killed:
                                 activeRhythms.add(new_rhythm)
                                 selectedRhythms.add(new_rhythm)
@@ -1069,11 +1073,49 @@ while True:
                         buttons.sprites()[6].click()
                         buttons.sprites()[6].click()
                         update_needed = True
-                        print('pasted')
+
+                if event.key == K_a: # select all rhythms (ctrl + a)
+                    if pygame.key.get_mods() & KMOD_CTRL:
+                        for x in activeRhythms.sprites():
+                            selectedRhythms.add(x)
+                            x.update_image()
+                        update_needed = True
+
+                if event.key == K_x: # cut selected rhythms (ctrl + x)
+                    if pygame.key.get_mods() & KMOD_CTRL:   
+                        clipboardRhythms.empty()
+
+                        # prepare relative positions
+                        min_left_grid = 1000
+                        slave_top_grid = 1000
+                        for x in selectedRhythms.sprites():
+                            if x.grid_pos[0] < min_left_grid:
+                                min_left_grid = x.grid_pos[0]
+                                slave_top_grid = x.grid_pos[1]
+                            elif x.grid_pos[0] == min_left_grid:
+                                if x.grid_pos[1] < slave_top_grid:
+                                    slave_top_grid = x.grid_pos[1]
+                        for x in selectedRhythms.sprites():
+                            x.relative_grid_pos = (x.grid_pos[0] - min_left_grid, x.grid_pos[1] - slave_top_grid)
+
+                        # copy rhythms to clipboardRhythms and delete from activeRhythms
+                        for x in selectedRhythms.sprites():
+                            clip_rhy = ActiveRhythm(x.binary, (x.rect.center))
+                            clip_rhy.sound = x.sound
+                            clip_rhy.relative_grid_pos = x.relative_grid_pos
+                            if x.decoupled:
+                                clip_rhy.decoupled = True
+                                clip_rhy.decoupled_sounds = x.decoupled_sounds.copy()
+                                clip_rhy.update_image()
+                            clipboardRhythms.add(clip_rhy)
+                            x.kill()
+                        buttons.sprites()[6].click()
+                        buttons.sprites()[6].click()
+                        update_needed = True
 
         if event.type == KEYUP:
             if mode == 'sandbox':
-                if event.key == 32:
+                if event.key == K_SPACE:
                     if spacedOut == True:
                         playbackButtons.sprites()[lastPlaybackClicked].click()
                         spacedOut = False
@@ -1129,7 +1171,17 @@ while True:
                             x.permutate()
                 else:
                     pur.move_bool = False
-                    pur.snap()    
+                    if pur in selectedRhythms:
+                        selectedRhythms.remove(pur)
+                        for x in selectedRhythms.sprites():
+                            x.snap()
+                            if x.rect.left < disp_width/3 or x.rect.top < 100 or x.rect.centery > disp_height - 2*rhyDotLen or x.rect.right > disp_width + 2:
+                                x.kill()
+                            for y in activeRhythms.sprites():
+                                if x.rect.colliderect(y.rect):
+                                    x.kill()
+                        selectedRhythms.add(pur)
+                    pur.snap()
                 # check collision with other active rhythms
                 pur.remove(activeRhythms)
                 for x in range(0, len(activeRhythms.sprites())):
