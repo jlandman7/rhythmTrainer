@@ -251,6 +251,8 @@ class ActiveRhythm(pygame.sprite.Sprite):
         self.grid_pos = (round((self.rect.left - (disp_width / 3)) / 22) , 
                          round((self.rect.top - 100) / 44))
         self.move_bool = False
+        self.decoupled = False
+        self.decoupled_sounds = []
     
     def update_image(self) -> pygame.Surface:
         self.image = Rhythm.rhythm_surface(self.binary, color = self.sound)
@@ -268,7 +270,7 @@ class ActiveRhythm(pygame.sprite.Sprite):
     def soundChange(self, newSound: int):
         self.sound = newSound
         self.update_image()
-        buttons.sprites()[6].click()
+        buttons.sprites()[6].click() # refresh mixer
         buttons.sprites()[6].click()
 
     def snap(self) -> None:
@@ -278,6 +280,50 @@ class ActiveRhythm(pygame.sprite.Sprite):
         self.rect = self.rect.move((-snap_by[0]+2, -snap_by[1]+1))
         self.grid_pos = (round((self.rect.left - (disp_width / 3)) / 22) , 
                          round((self.rect.top - 100) / 44))
+
+    def decouple(self) -> None:
+        """
+        Turn active rhythm into a rhythm with decoupled sound
+        This allows you to have multiple sounds for one rhythm pattern
+        Instead of permutating multiple disparate rhythms
+        Once decoupled, the individual dots can be soundchanged separately
+        """
+        
+        w = 0
+        rhy_surf = pygame.Surface((w, 2*rhyDotLen-1))
+        rhy_surf.fill(WHITE)
+        temp_sound = self.sound
+        print("Decoupling rhythm with sound ", temp_sound)
+        for j in range(0,len(self.binary)):
+            if self.binary[j] == "1":
+                w += rhyDotLen
+                temp = rhy_surf
+                rhy_surf = pygame.Surface((w, 2*rhyDotLen-1))
+                rhy_surf.fill(WHITE)
+                rhy_surf.blit(temp, (0,0))
+                pygame.draw.circle(rhy_surf, temp_sound, (rhyDotLen*j+11,11), 10)
+            elif self.binary[j] == "0":
+                w += rhyDotLen
+                temp = rhy_surf
+                rhy_surf = pygame.Surface((w, 2*rhyDotLen-1))
+                rhy_surf.fill(WHITE)
+                rhy_surf.blit(temp, (0,0))
+                pygame.draw.circle(rhy_surf, BLACK, (rhyDotLen*j+11,32), 10, 2)
+
+        
+        self.image = rhy_surf
+        self.sound = 8
+        buttons.sprites()[6].click() # refresh mixer
+        buttons.sprites()[6].click()
+        self.decoupled = True
+    
+    def recouple(self) -> None:
+        self.sound = 0
+        self.update_image()
+        buttons.sprites()[6].click() # refresh mixer
+        buttons.sprites()[6].click()
+        self.decoupled = False
+
 activeRhythms = pygame.sprite.Group()
 pickedUpRhythm = pygame.sprite.GroupSingle()
 pickedUpRhythms = pygame.sprite.Group()
@@ -376,11 +422,18 @@ class Highlighter(pygame.sprite.Sprite):
         if buttons.sprites()[5].status == 0:
             for x in activeRhythms.sprites():
                 if self.rect.colliderect(x.rect):
-                    highlighted_pos = self.grid_pos - x.grid_pos[0]
-                    try:
-                        if x.binary[highlighted_pos] == '1':
-                            self.sounds.append(x.sound)
-                    except IndexError: pass
+                    if not x.decoupled:
+                        highlighted_pos = self.grid_pos - x.grid_pos[0]
+                        try:
+                            if x.binary[highlighted_pos] == '1':
+                                self.sounds.append(x.sound)
+                        except IndexError: pass
+                    elif x.decoupled:
+                        highlighted_pos = self.grid_pos - x.grid_pos[0]
+                        try:
+                            if x.binary[highlighted_pos] == '1':
+                                self.sounds.append(x.image.get_at((rhyDotLen*highlighted_pos + 11, 11)))
+                        except IndexError: pass
 
     def play_sounds(self):
         if self.sounds:
@@ -467,17 +520,21 @@ class SoundChanger(pygame.sprite.Sprite):
         self.rect = self.image.get_rect(center = pos)
         self.mask = pygame.mask.from_surface(self.image)
         self.assocRhythm = assocRhythm
+        
         self.deathWish = 0
     
     def octant_check(self, pos):
         radius = ((pos[0] - self.rect.centerx)**2 + (pos[1] - self.rect.centery)**2)**(1/2)
-        if radius < 81:
+        if radius < 81 and radius > 14:
             LR: int = pos[0] < self.rect.centerx   #left true, right false
             UD: int = pos[1] > self.rect.centery   #down true, up false
             # y-hug false, x-hug true
             hug: int = (pos[0]-self.rect.centerx)**2 > (pos[1]-self.rect.centery)**2   
             octant = 4*LR + 2*UD + hug
             self.assocRhythm.soundChange(octant)
+        elif radius <= 14:
+            self.assocRhythm.decouple()
+
 soundChanger = pygame.sprite.GroupSingle()
 
 class DropdownBox(pygame.sprite.Sprite):
