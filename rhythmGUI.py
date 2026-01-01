@@ -208,6 +208,7 @@ class Counter(pygame.sprite.Sprite):
         self.image.fill((255,255,255,255))
         self.rect = self.image.get_rect(topleft = pos)
         self.text = miniFont.render((str(self.num)), True, (0,0,0, 255))
+        self.image.set_alpha(255)
         
     def update(self) -> None:
         self.text = miniFont.render((str(self.num)), True, (0,0,0, 255))
@@ -323,7 +324,6 @@ class ActiveRhythm(pygame.sprite.Sprite):
         Instead of permutating multiple disparate rhythms
         Once decoupled, the individual dots can be soundchanged separately
         """
-        
         w = 0
         rhy_surf = pygame.Surface((w, 2*rhyDotLen-1))
         rhy_surf.fill(WHITE)
