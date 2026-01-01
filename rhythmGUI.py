@@ -344,6 +344,7 @@ class ActiveRhythm(pygame.sprite.Sprite):
 activeRhythms = pygame.sprite.Group()
 pickedUpRhythm = pygame.sprite.GroupSingle()
 selectedRhythms = pygame.sprite.Group()
+clipboardRhythms = pygame.sprite.Group()
 
 class Dragger(pygame.sprite.Sprite):
     def __init__(self,  pos: tuple, type: str) -> None:
@@ -950,6 +951,12 @@ while True:
         if rel[0]+rel[1]:
             pickedUpRhythm.sprite.move(rel)
         update_needed = True
+    if len(selectedRhythms.sprites()):
+        rel = pygame.mouse.get_rel()
+        if rel[0]+rel[1]:
+            for x in selectedRhythms.sprites():
+                x.move(rel)
+        update_needed = True
     # dragging draggers
     if len(clickedDragger.sprites()):
         rel = pygame.mouse.get_rel()
@@ -983,6 +990,43 @@ while True:
                         playbackButtons.sprites()[0].click()
                     spacedOut = True
                     update_needed = True
+
+                if event.key == K_DELETE or event.key == K_BACKSPACE:
+                    selectedRhythms.empty()
+                    buttons.sprites()[6].click()
+                    buttons.sprites()[6].click()
+                    update_needed = True
+                
+                if event.key == K_c:
+                    if pygame.key.get_mods() & KMOD_CTRL:
+                        clipboardRhythms.empty()
+                        for x in selectedRhythms.sprites():
+                            clip_rhy = ActiveRhythm(x.binary, (x.rect.center))
+                            clip_rhy.sound = x.sound
+                            if x.decoupled:
+                                clip_rhy.decoupled = True
+                                clip_rhy.decoupled_sounds = x.decoupled_sounds.copy()
+                            clipboardRhythms.add(clip_rhy)
+                        print('copied')
+                
+                if event.key == K_v:
+                    if pygame.key.get_mods() & KMOD_CTRL:
+                        Display.blit(workingDisplay,(0,0))
+                        offset_x = pygame.mouse.get_pos()[0] - clipboardRhythms.sprites()[0].rect.left
+                        offset_y = pygame.mouse.get_pos()[1] - clipboardRhythms.sprites()[0].rect.top
+                        for x in clipboardRhythms.sprites():
+                            new_rhy = ActiveRhythm(x.binary, (x.rect.left + offset, x.rect.top + offset))
+                            new_rhy.sound = x.sound
+                            if x.decoupled:
+                                new_rhy.decoupled = True
+                                new_rhy.decoupled_sounds = x.decoupled_sounds.copy()
+                            activeRhythms.add(new_rhy)
+                            sprites.add(new_rhy)
+                            selectedRhythms.add(new_rhy)
+                            offset += 10
+                        update_needed = True
+                        print('pasted')
+
 
         if event.type == KEYUP:
             if mode == 'sandbox':
