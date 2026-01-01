@@ -259,25 +259,24 @@ class ActiveRhythm(pygame.sprite.Sprite):
         self.decoupled_sounds = []
         self.update_image()
         self.rect = self.image.get_rect(center = pos)
-        self.grid_pos = (round((self.rect.left - (disp_width / 3)) / 22) , 
+        self.grid_pos = (round((self.rect.left - (disp_width / 3)) / 22), 
                          round((self.rect.top - 100) / 44))
         self.move_bool = False
     
     def update_image(self) -> pygame.Surface:
         self.image = Rhythm.rhythm_surface(self.binary, color = self.sound)
         if not self.decoupled:    
-            if self in pickedUpRhythms.sprites():
+            if self in selectedRhythms.sprites():
                 pygame.draw.rect(self.image, (255,255,255), (0,0,self.image.get_width(), self.image.get_height()), 1)
-
-        if self.decoupled:
+        elif self.decoupled:
             w = len(self.binary) * rhyDotLen
             rhy_surf = pygame.Surface((w, 2*rhyDotLen-1))
             rhy_surf.fill(WHITE)
             sound_iterator = 0
             temp_color = colors[self.decoupled_sounds[sound_iterator]]
-            
+            if self in selectedRhythms.sprites():
+                pygame.draw.rect(rhy_surf, (150,150,150), (0,0,self.image.get_width(), self.image.get_height()), 1)
             for j in range(0,len(self.binary)):
-                
                 if self.binary[j] == "1":
                     pygame.draw.circle(rhy_surf, temp_color, (rhyDotLen*j+11,11), 10)
                     sound_iterator += 1
@@ -286,7 +285,6 @@ class ActiveRhythm(pygame.sprite.Sprite):
                     except IndexError: pass
                 elif self.binary[j] == "0":
                     pygame.draw.circle(rhy_surf, BLACK, (rhyDotLen*j+11,32), 10, 2)
-            
             self.image = rhy_surf
 
     def permutate(self) -> None:
@@ -329,41 +327,24 @@ class ActiveRhythm(pygame.sprite.Sprite):
         w = 0
         rhy_surf = pygame.Surface((w, 2*rhyDotLen-1))
         rhy_surf.fill(WHITE)
-        temp_sound = self.sound
-        for j in range(0,len(self.binary)):
-            if self.binary[j] == "1":
-                w += rhyDotLen
-                temp = rhy_surf
-                rhy_surf = pygame.Surface((w, 2*rhyDotLen-1))
-                rhy_surf.fill(WHITE)
-                rhy_surf.blit(temp, (0,0))
-                pygame.draw.circle(rhy_surf, colors[temp_sound], (rhyDotLen*j+11,11), 10)
-            elif self.binary[j] == "0":
-                w += rhyDotLen
-                temp = rhy_surf
-                rhy_surf = pygame.Surface((w, 2*rhyDotLen-1))
-                rhy_surf.fill(WHITE)
-                rhy_surf.blit(temp, (0,0))
-                pygame.draw.circle(rhy_surf, BLACK, (rhyDotLen*j+11,32), 10, 2)
-
-        for j in range(0,len(self.binary)):
-            if self.binary[j] == "1":
-                self.decoupled_sounds.append(temp_sound)
-        
-        self.image = rhy_surf
+        if not self.decoupled_sounds:
+            for j in range(0,len(self.binary)):
+                if self.binary[j] == "1":
+                    self.decoupled_sounds.append(self.sound)
+        self.decoupled = True
+        self.update_image()
         buttons.sprites()[6].click() # refresh mixer
         buttons.sprites()[6].click()
-        self.decoupled = True
+        
     
     def recouple(self) -> None:
-        self.sound = 0
         self.decoupled = False
         self.update_image()
         buttons.sprites()[6].click() # refresh mixer
         buttons.sprites()[6].click()
 activeRhythms = pygame.sprite.Group()
 pickedUpRhythm = pygame.sprite.GroupSingle()
-pickedUpRhythms = pygame.sprite.Group()
+selectedRhythms = pygame.sprite.Group()
 
 class Dragger(pygame.sprite.Sprite):
     def __init__(self,  pos: tuple, type: str) -> None:
@@ -584,10 +565,26 @@ class SoundChanger(pygame.sprite.Sprite):
                     self.assocRhythm.update_image()
                 
             else:
-                self.assocRhythm.soundChange(octant)
-        
+                if self.assocRhythm in selectedRhythms:
+                    for x in selectedRhythms.sprites():
+                        x.soundChange(octant)
+                else:
+                    self.assocRhythm.soundChange(octant)
+
         elif radius <= 14:
-            if not self.assocRhythm.decoupled:
+            if self.assocRhythm in selectedRhythms:
+                i = 0
+                for x in selectedRhythms.sprites():
+                    if not x.decoupled:
+                        i += 1
+                if i == len(selectedRhythms.sprites()):
+                    for x in selectedRhythms.sprites():
+                        x.decouple()
+                elif i == 0:
+                    for x in selectedRhythms.sprites():
+                        x.recouple()
+
+            elif not self.assocRhythm.decoupled:
                 self.assocRhythm.decouple()
             else:
                 self.assocRhythm.recouple()
@@ -698,17 +695,16 @@ class SelectionBox(pygame.sprite.Sprite):
         Add any colliding rhythms to pickedUpRhythms group and update their images.
         """
         selected_rhythms = pygame.sprite.Group()
-        previously_selected = pickedUpRhythms.sprites()
-        pickedUpRhythms.empty()
+        previously_selected = selectedRhythms.sprites()
+        selectedRhythms.empty()
         for x in activeRhythms.sprites():
             if self.rect.colliderect(x.rect):
                 selected_rhythms.add(x)
         for x in selected_rhythms.sprites():
-            pickedUpRhythms.add(x)
+            selectedRhythms.add(x)
             x.update_image()
         for x in previously_selected:
             x.update_image()
-        
         self.kill()
 selectionBox = pygame.sprite.GroupSingle()
 
@@ -824,7 +820,6 @@ def sprites_clicked(mouse_pos: tuple, mouse_buttons: tuple) -> None:
                     newSelectionBox = SelectionBox(mouse_pos, mouse_pos)
                     selectionBox.add(newSelectionBox)
                     sprites.add(newSelectionBox)
-                    print('selection box started')
     except IndexError: pass
     update_all()
 
@@ -1041,7 +1036,11 @@ while True:
                     pur.kill()
                     killed = True
                 elif pur.move_bool == False:
-                    pur.permutate()
+                    if pur not in selectedRhythms:
+                        pur.permutate()
+                    else:
+                        for x in selectedRhythms.sprites():
+                            x.permutate()
                 else:
                     pur.move_bool = False
                     pur.snap()    
