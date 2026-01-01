@@ -818,13 +818,16 @@ def sprites_clicked(mouse_pos: tuple, mouse_buttons: tuple) -> None:
             
             # start selection box if not clicking on any sprite
             if mode == "sandbox" and mouse_pos_in_workspace() and unclicked == len(sprites.sprites()):
-                newSelectionBox = SelectionBox(mouse_pos, mouse_pos)
-                selectionBox.add(newSelectionBox)
-                sprites.add(newSelectionBox)
-                print('selection box started')
+                if soundChanger.sprites():
+                    soundChanger.sprite.octant_check(mouse_pos)
+                else:
+                    newSelectionBox = SelectionBox(mouse_pos, mouse_pos)
+                    selectionBox.add(newSelectionBox)
+                    sprites.add(newSelectionBox)
+                    print('selection box started')
     except IndexError: pass
-    update_all()            
-    
+    update_all()
+
 def sandbox_init() -> None:
     global mode
     mode = 'sandbox'
