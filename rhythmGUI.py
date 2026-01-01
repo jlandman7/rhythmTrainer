@@ -205,15 +205,15 @@ class Counter(pygame.sprite.Sprite):
             self.image = pygame.Surface((22, 22))
         elif self.num == 60:
             self.image = pygame.Surface((34, 22))
-        self.image.fill(WHITE)
+        self.image.fill((255,255,255,255))
         self.rect = self.image.get_rect(topleft = pos)
-        self.text = miniFont.render((str(self.num)), True, BLACK)
+        self.text = miniFont.render((str(self.num)), True, (0,0,0, 255))
         
     def update(self) -> None:
-        self.text = miniFont.render((str(self.num)), True, BLACK)
-        self.image.fill(WHITE)
-        self.image.blit(self.text, (3,3))    
-counters = pygame.sprite.Group()    
+        self.text = miniFont.render((str(self.num)), True, (0,0,0, 255))
+        self.image.fill((255,255,255,255))
+        self.image.blit(self.text, (3,3))
+counters = pygame.sprite.Group()
 
 class Rhythm(pygame.sprite.Sprite):
     def __init__(self, ctState: int, rhythmIterator: int, rowCount:int , rowLength: int) -> None:
@@ -270,39 +270,35 @@ class ActiveRhythm(pygame.sprite.Sprite):
                 pygame.draw.rect(self.image, (255,255,255), (0,0,self.image.get_width(), self.image.get_height()), 1)
 
         if self.decoupled:
-            w = 0
+            w = len(self.binary) * rhyDotLen
             rhy_surf = pygame.Surface((w, 2*rhyDotLen-1))
             rhy_surf.fill(WHITE)
             sound_iterator = 0
             temp_color = colors[self.decoupled_sounds[sound_iterator]]
             
             for j in range(0,len(self.binary)):
+                
                 if self.binary[j] == "1":
-                    w += rhyDotLen
-                    temp = rhy_surf
-                    rhy_surf = pygame.Surface((w, 2*rhyDotLen-1))
-                    rhy_surf.fill(WHITE)
-                    rhy_surf.blit(temp, (0,0))
                     pygame.draw.circle(rhy_surf, temp_color, (rhyDotLen*j+11,11), 10)
+                    sound_iterator += 1
+                    try:
+                        temp_color = colors[self.decoupled_sounds[sound_iterator]]
+                    except IndexError: pass
                 elif self.binary[j] == "0":
-                    w += rhyDotLen
-                    temp = rhy_surf
-                    rhy_surf = pygame.Surface((w, 2*rhyDotLen-1))
-                    rhy_surf.fill(WHITE)
-                    rhy_surf.blit(temp, (0,0))
                     pygame.draw.circle(rhy_surf, BLACK, (rhyDotLen*j+11,32), 10, 2)
             
             self.image = rhy_surf
 
     def permutate(self) -> None:
-        if not self.decoupled:
-            self.binary = self.binary[1:]+self.binary[0]
-            self.update_image()
-        else:
-            if self.binary[0] == "1":
-                self.decoupled_sounds = self.decoupled_sounds[1:] + [self.decoupled_sounds[0]]
-            self.binary = self.binary[1:]+self.binary[0]
-            self.update_image()
+        if soundChanger.sprite is None:    
+            if not self.decoupled:
+                self.binary = self.binary[1:]+self.binary[0]
+                self.update_image()
+            else:
+                if self.binary[0] == "1":
+                    self.decoupled_sounds = self.decoupled_sounds[1:] + [self.decoupled_sounds[0]]
+                self.binary = self.binary[1:]+self.binary[0]
+                self.update_image()
 
     def move(self, rel: tuple) -> None:
         self.rect = self.rect.move((rel[0], rel[1]))
@@ -365,7 +361,6 @@ class ActiveRhythm(pygame.sprite.Sprite):
         buttons.sprites()[6].click() # refresh mixer
         buttons.sprites()[6].click()
         self.decoupled = False
-
 activeRhythms = pygame.sprite.Group()
 pickedUpRhythm = pygame.sprite.GroupSingle()
 pickedUpRhythms = pygame.sprite.Group()
@@ -474,7 +469,11 @@ class Highlighter(pygame.sprite.Sprite):
                         highlighted_pos = self.grid_pos - x.grid_pos[0]
                         try:
                             if x.binary[highlighted_pos] == '1':
-                                self.sounds.append(x.image.get_at((rhyDotLen*highlighted_pos + 11, 11)))
+                                hit_number = -1
+                                for j in range(0, highlighted_pos + 1):
+                                    if x.binary[j] == "1":
+                                        hit_number += 1
+                                self.sounds.append(x.decoupled_sounds[hit_number])
                         except IndexError: pass
 
     def play_sounds(self):
@@ -575,17 +574,15 @@ class SoundChanger(pygame.sprite.Sprite):
             octant = 4*LR + 2*UD + hug
 
             if self.assocRhythm.decoupled:
-                # determine which dot is clicked
                 highlighted_dot = (self.rect.centerx - self.assocRhythm.rect.left) // 22
-                print("Highlighted dot:", highlighted_dot)
                 if self.assocRhythm.binary[highlighted_dot] == "1":
-                    hit_number = 0
+                    hit_number = -1
                     for x in range(0, highlighted_dot + 1):
                        if self.assocRhythm.binary[x] == "1":
                             hit_number += 1
-                    print("Hit number:", hit_number)
                     self.assocRhythm.decoupled_sounds[hit_number] = octant
-                print("Decoupled sounds:", self.assocRhythm.decoupled_sounds)
+                    self.assocRhythm.update_image()
+                
             else:
                 self.assocRhythm.soundChange(octant)
         
