@@ -357,10 +357,10 @@ class ActiveRhythm(pygame.sprite.Sprite):
     
     def recouple(self) -> None:
         self.sound = 0
+        self.decoupled = False
         self.update_image()
         buttons.sprites()[6].click() # refresh mixer
         buttons.sprites()[6].click()
-        self.decoupled = False
 activeRhythms = pygame.sprite.Group()
 pickedUpRhythm = pygame.sprite.GroupSingle()
 pickedUpRhythms = pygame.sprite.Group()
