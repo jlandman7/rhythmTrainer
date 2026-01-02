@@ -198,12 +198,15 @@ playbackButtons = pygame.sprite.Group()
 homeButtons = pygame.sprite.Group()
 
 class Counter(pygame.sprite.Sprite):
-    def __init__(self, pos: tuple, default_num: int) -> None:
+    def __init__(self, pos: tuple, type: str) -> None:
         pygame.sprite.Sprite.__init__(self)
-        self.num = default_num
-        if self.num == 1:
+        self.type = type
+        self.num = {'metronome': 60, 'subdivision': 4, 'toolboxPage': 1}[type]
+        self.max = {'metronome': 300, 'subdivision': 12, 'toolboxPage': 5}[type]
+        if self.type == 'toolboxPage' or self.type == 'subdivision':
             self.image = pygame.Surface((22, 22))
-        elif self.num == 60:
+        elif self.type == 'metronome':
+            print('metronome counter created')
             self.image = pygame.Surface((34, 22))
         self.image.fill((255,255,255,255))
         self.rect = self.image.get_rect(topleft = pos)
@@ -211,9 +214,14 @@ class Counter(pygame.sprite.Sprite):
         self.image.set_alpha(255)
         
     def update(self) -> None:
+        if self.num >= self.max:
+            self.num = self.max
+        if self.num <= 1:
+            self.num = 1
         self.text = miniFont.render((str(self.num)), True, (0,0,0, 255))
         self.image.fill((255,255,255,255))
         self.image.blit(self.text, (3,3))
+
 counters = pygame.sprite.Group()
 
 class Cursor(pygame.sprite.Sprite):
@@ -226,6 +234,18 @@ class Cursor(pygame.sprite.Sprite):
         self.rect = self.image.get_rect(topleft = (self.x, self.attached_to.rect.top + 2))
         self.start_time = pygame.time.get_ticks()
 
+    def type_number(self, key: int) -> None:
+        key_str = str(key-48)
+        self.attached_to.num = int(str(self.attached_to.num) + key_str)
+        self.attached_to.update()
+
+    def delete_number(self) -> None:
+        try:
+            self.attached_to.num = int((str(self.attached_to.num))[:-1])
+        except ValueError:
+            self.attached_to.num = 0
+        self.attached_to.update()
+
     def blinky(self) -> None:
         if pygame.time.get_ticks() - self.start_time > 500:
             self.start_time = pygame.time.get_ticks()
@@ -233,6 +253,10 @@ class Cursor(pygame.sprite.Sprite):
                 self.image.set_alpha(0)
             else:
                 self.image.set_alpha(255)
+    
+    def update(self) -> None:
+        self.x = self.attached_to.rect.left + 5 + self.attached_to.text.get_width()
+        self.rect = self.image.get_rect(topleft = (self.x, self.attached_to.rect.top + 2))
 cursor = pygame.sprite.GroupSingle()
 
 class Rhythm(pygame.sprite.Sprite):
@@ -388,16 +412,10 @@ class Dragger(pygame.sprite.Sprite):
         self.image = self.graphics[self.status]
 
     def update(self, dir_dragged: str = 'none') -> None:
-        if self.type == 'metronome':
-            if dir_dragged == 'up' and counters.sprites()[1].num < 300:
-                counters.sprites()[1].num += 1
-            elif dir_dragged == 'down' and counters.sprites()[1].num > 1:
-                counters.sprites()[1].num -= 1  
-        elif self.type == 'subdivision':
-            if dir_dragged == 'up' and counters.sprites()[2].num < 9:
-                counters.sprites()[2].num += 1
-            elif dir_dragged == 'down' and counters.sprites()[2].num > 1:
-                counters.sprites()[2].num -= 1
+        if dir_dragged == 'up':
+            counters.sprites()[1].num += 1
+        elif dir_dragged == 'down':
+            counters.sprites()[1].num -= 1  
         if dir_dragged != 'none':
             self.animate()
 draggers = pygame.sprite.Group()      
@@ -1043,7 +1061,7 @@ def sandbox_init() -> None:
                         (40,75), ('CT', 0)))
     buttons.add(Button(['images/trivial_button_unpressed.png', 'images/trivial_button_pressed.png'],
                         (84,75), ('CT', 1)))
-    counters.add(Counter((disp_width/3-74, 76), 1))
+    counters.add(Counter((disp_width/3-74, 76), 'toolboxPage'))
     
     # workspace population
     metronome_x = disp_width/3 + 55
@@ -1051,14 +1069,14 @@ def sandbox_init() -> None:
                        (metronome_x - 30, 72), ('onOff', 4)))
     bpm_text = miniFont.render('Metronome (bpm):', True, WORKSPACEPURPLE)
     bpm_text_rect = bpm_text.get_rect(midleft = (metronome_x, 86))
-    counters.add(Counter((metronome_x + bpm_text_rect.width + 5, 74), 60))
+    counters.add(Counter((metronome_x + bpm_text_rect.width + 5, 74), 'metronome'))
     draggers.add(Dragger((metronome_x + bpm_text_rect.width + 41, 73), 'metronome'))
     subdiv_x = disp_width/2 + 70
     buttons.add(Button(['images/on_button.png', 'images/off_button.png'],
                        (subdiv_x - 30, 72), ('onOff', 5)))
     subdiv_text = miniFont.render('Subdivision:', True, WORKSPACEPURPLE)
     subdiv_text_rect = subdiv_text.get_rect(midleft = (subdiv_x, 86))
-    counters.add(Counter((subdiv_x + subdiv_text_rect.width + 5, 74), 1))
+    counters.add(Counter((subdiv_x + subdiv_text_rect.width + 5, 74), 'subdivision'))
     draggers.add(Dragger((subdiv_x + subdiv_text_rect.width + 30, 73), 'subdivision'))
     workingDisplay.blit(bpm_text, bpm_text_rect)
     workingDisplay.blit(subdiv_text, subdiv_text_rect)
@@ -1144,7 +1162,19 @@ while True:
         update_needed = True
 
     for event in pygame.event.get():
-        
+        if cursor.sprites():
+            if event.type == KEYDOWN:
+                num_keys = [K_0, K_1, K_2, K_3, K_4, K_5, K_6, K_7, K_8, K_9]
+                if event.key in num_keys:
+                    cursor.sprite.type_number(event.key)
+                    update_needed = True
+                if event.key == K_BACKSPACE or event.key == K_DELETE:
+                    cursor.sprite.delete_number()
+                    update_needed = True
+                if event.key == K_RETURN or event.key == K_KP_ENTER:
+                    cursor.sprite.kill()
+                    update_needed = True
+
         if event.type == QUIT:
             pygame.quit()
             sys.exit()
