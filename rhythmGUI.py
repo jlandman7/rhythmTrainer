@@ -30,7 +30,7 @@ update_needed = False
 playbackClick = False
 upDownClick = False  #up/core = 0, down/trivial = 1
 updateNeeded = False
-spacedOut = False
+playback_keyed = False
 
 ### Colors and fonts init -------------------------------------
 BLACK = (0,0,0)
@@ -106,9 +106,8 @@ class Button(pygame.sprite.Sprite):
         elif self.type[0] == 'playback':
             # set up unclicking
             if self.status == 0:
-                global playbackClick, lastPlaybackClicked
+                global lastPlaybackClicked
                 self.status = 1
-                playbackClick = True
                 lastPlaybackClicked = self.type[1]
             else:
                 self.status = 0
@@ -133,7 +132,8 @@ class Button(pygame.sprite.Sprite):
             if self.type[1] == 0:
                 print('homescreen')
             elif self.type[1] == 1:
-                sandbox_init()
+                if mode != 'sandbox':
+                    sandbox_init()
             elif self.type[1] == 2:
                 print('practice screen')
             elif self.type[1] == 3:
@@ -215,6 +215,25 @@ class Counter(pygame.sprite.Sprite):
         self.image.fill((255,255,255,255))
         self.image.blit(self.text, (3,3))
 counters = pygame.sprite.Group()
+
+class Cursor(pygame.sprite.Sprite):
+    def __init__(self, attached_to: pygame.sprite.Sprite) -> None:
+        pygame.sprite.Sprite.__init__(self)
+        self.image = pygame.Surface((2,17), pygame.SRCALPHA)
+        self.image.fill((0,0,0,255))
+        self.attached_to = attached_to
+        self.x = self.attached_to.rect.left + 5 + self.attached_to.text.get_width()
+        self.rect = self.image.get_rect(topleft = (self.x, self.attached_to.rect.top + 2))
+        self.start_time = pygame.time.get_ticks()
+
+    def blinky(self) -> None:
+        if pygame.time.get_ticks() - self.start_time > 500:
+            self.start_time = pygame.time.get_ticks()
+            if self.image.get_alpha() == 255:
+                self.image.set_alpha(0)
+            else:
+                self.image.set_alpha(255)
+cursor = pygame.sprite.GroupSingle()
 
 class Rhythm(pygame.sprite.Sprite):
     def __init__(self, ctState: int, rhythmIterator: int, rowCount:int , rowLength: int) -> None:
@@ -723,7 +742,7 @@ class ClipboardBox(pygame.sprite.Sprite):
         self.rect = self.image.get_rect(topleft = pos)
         self.text = miniFont.render(self.type, True, (0,0,0))
         self.image.blit(self.text, (5,3))
-        pygame.draw.rect(self.image, (0,0,0,5), (0,0,80,25), 1)
+        pygame.draw.rect(self.image, (0,0,0,2), (0,0,80,25), 1)
         self.clicked = False
         self.grace_clicked = False
 
@@ -891,9 +910,11 @@ def update_all() -> None:
     sprites.draw(Display)
 
 def sprites_clicked(mouse_pos: tuple, mouse_buttons: tuple) -> None:
+    # handles sprite clicks
     try:
-        # handle sprite-click functions
         unclicked = 0
+        if cursor.sprites():
+            cursor.sprite.kill()
         for x in range(0, len(sprites.sprites())):
             spr = sprites.sprites()
             if spr[x].rect.collidepoint(mouse_pos):
@@ -901,6 +922,8 @@ def sprites_clicked(mouse_pos: tuple, mouse_buttons: tuple) -> None:
                 if spr[x] in buttons:
                     spr[x].click()
                 elif spr[x] in playbackButtons:
+                    global playbackClick
+                    playbackClick = True
                     spr[x].click()
                 elif spr[x] in homeButtons:
                     spr[x].click()
@@ -943,6 +966,10 @@ def sprites_clicked(mouse_pos: tuple, mouse_buttons: tuple) -> None:
                     clickedSlider.add(spr[x])
                 elif spr[x] in clipboardBoxes:
                     spr[x].click()
+                elif spr[x] in counters:
+                    newCursor = Cursor(spr[x])
+                    cursor.add(newCursor)
+                    sprites.add(newCursor)
             else:
                 unclicked += 1
             
@@ -1111,6 +1138,10 @@ while True:
         rel = pygame.mouse.get_rel()
         clickedSlider.sprite.move(rel[0])
         update_needed = True
+    # cursor blink
+    if len(cursor.sprites()):
+        cursor.sprite.blinky()
+        update_needed = True
 
     for event in pygame.event.get():
         
@@ -1125,7 +1156,12 @@ while True:
                         playbackButtons.sprites()[1].click()
                     else:
                         playbackButtons.sprites()[0].click()
-                    spacedOut = True
+                    playback_keyed = True
+                    update_needed = True
+
+                if event.key == K_b: # stop
+                    playbackButtons.sprites()[2].click()
+                    playback_keyed = True
                     update_needed = True
 
                 if event.key == K_DELETE or event.key == K_BACKSPACE: # delete selected rhythms
@@ -1157,10 +1193,10 @@ while True:
 
         if event.type == KEYUP:
             if mode == 'sandbox':
-                if event.key == K_SPACE:
-                    if spacedOut == True:
+                if event.key == K_SPACE or event.key == K_b:
+                    if playback_keyed == True:
                         playbackButtons.sprites()[lastPlaybackClicked].click()
-                        spacedOut = False
+                        playback_keyed = False
                         update_needed = True
 
         if event.type == MOUSEBUTTONDOWN:
