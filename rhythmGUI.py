@@ -2,6 +2,7 @@
 import pygame, sys
 from pygame.locals import *
 from matrixGen3 import data, cores, trivials
+import time
 
 ### display init ---------------------------------------------
 pygame.init()
@@ -24,7 +25,6 @@ lastUpDownClicked = 0
 lastPlaybackClicked = 0
 ctState = 0
 coresAndTrivials = [cores,trivials]
-clock = pygame.time.Clock()
 metronomeSound = pygame.mixer.Sound('sounds/metronome.wav')
 update_needed = False
 playbackClick = False
@@ -555,7 +555,7 @@ class Timer:
             # initialize
             self.duration = 60 / bpm * 1000
             self.sub_duration = self.duration / subdivs
-            self.start_time = pygame.time.get_ticks()
+            self.start_time = time.time() * 1000
             self.sub_iterator = 0
 
             if buttons.sprites()[4].status == 0:
@@ -569,7 +569,7 @@ class Timer:
         self.AV = False
 
     def update(self):
-        current_time = pygame.time.get_ticks()
+        current_time = time.time() * 1000
         elapsed =  (current_time - self.start_time)
         if elapsed - (self.sub_duration * self.sub_iterator) >= self.sub_duration:
             self.subdivision()
@@ -805,7 +805,6 @@ class ClipboardManager:
             if x.type == 'copy':
                 copyBox.add(x)
         
-
     def copy(self):
         clipboardRhythms.empty()
 
@@ -833,7 +832,7 @@ class ClipboardManager:
                 clip_rhy.update_image()
             clipboardRhythms.add(clip_rhy)
 
-    def paste(self, mouse_pos: tuple):
+    def paste(self, pos: tuple):
         for x in clipboardRhythms.sprites():
             killed = False
             
@@ -847,9 +846,8 @@ class ClipboardManager:
                 new_rhythm.update_image()
 
             # position according to mouse
-            mouse_pos = pygame.mouse.get_pos()
-            new_rhythm.rect.topleft = (mouse_pos[0] + new_rhythm.relative_grid_pos[0]*22,
-                        mouse_pos[1] + new_rhythm.relative_grid_pos[1]*44)
+            new_rhythm.rect.topleft = (pos[0] + new_rhythm.relative_grid_pos[0]*22,
+                        pos[1] + new_rhythm.relative_grid_pos[1]*44)
             new_rhythm.snap()
 
             # determine if valid location
