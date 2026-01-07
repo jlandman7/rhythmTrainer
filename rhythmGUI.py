@@ -114,7 +114,7 @@ class Button(pygame.sprite.Sprite):
 
             # click play button -> play
             global timer
-            if self.type[1] == 0 and timer.active == False:
+            if self.type[1] == 0 and timer.active == False and cursor.sprite is None:
                 timer = Timer(counters.sprites()[1].num, counters.sprites()[2].num)
             # click pause/stop button -> pause/return home
             elif self.type[1] and timer.active == True:
@@ -206,7 +206,6 @@ class Counter(pygame.sprite.Sprite):
         if self.type == 'toolboxPage' or self.type == 'subdivision':
             self.image = pygame.Surface((22, 22))
         elif self.type == 'metronome':
-            print('metronome counter created')
             self.image = pygame.Surface((34, 22))
         self.image.fill((255,255,255,255))
         self.rect = self.image.get_rect(topleft = pos)
@@ -214,14 +213,15 @@ class Counter(pygame.sprite.Sprite):
         self.image.set_alpha(255)
         
     def update(self) -> None:
-        if self.num >= self.max:
-            self.num = self.max
-        if self.num <= 1:
-            self.num = 1
         self.text = miniFont.render((str(self.num)), True, (0,0,0, 255))
         self.image.fill((255,255,255,255))
         self.image.blit(self.text, (3,3))
 
+    def validate(self) -> None:
+        if self.num < 1:
+            self.num = 1
+        elif self.num > self.max:
+            self.num = self.max
 counters = pygame.sprite.Group()
 
 class Cursor(pygame.sprite.Sprite):
@@ -401,6 +401,9 @@ class Dragger(pygame.sprite.Sprite):
         self.status = 0
         self.image = self.graphics[0]
         self.type = type
+        for x in counters.sprites():
+            if x.type == type:
+                self.attached_to = x
         self.pos = pos
         self.rect = self.image.get_rect(topleft = pos)
 
@@ -413,9 +416,9 @@ class Dragger(pygame.sprite.Sprite):
 
     def update(self, dir_dragged: str = 'none') -> None:
         if dir_dragged == 'up':
-            counters.sprites()[1].num += 1
+            self.attached_to.num += 1
         elif dir_dragged == 'down':
-            counters.sprites()[1].num -= 1  
+            self.attached_to.num -= 1
         if dir_dragged != 'none':
             self.animate()
 draggers = pygame.sprite.Group()      
@@ -877,6 +880,7 @@ class ClipboardManager:
             x.kill()
         selectedRhythms.empty()
 clipboardManager = ClipboardManager()
+
 ### global functions -----------------------------------------
 def top_menu_init():
     top_menu_data = [(' Rhythm Trainer ', (disp_width/2), ('home', 0)), 
@@ -932,6 +936,7 @@ def sprites_clicked(mouse_pos: tuple, mouse_buttons: tuple) -> None:
     try:
         unclicked = 0
         if cursor.sprites():
+            cursor.attached_to.validate()
             cursor.sprite.kill()
         for x in range(0, len(sprites.sprites())):
             spr = sprites.sprites()
@@ -985,6 +990,7 @@ def sprites_clicked(mouse_pos: tuple, mouse_buttons: tuple) -> None:
                 elif spr[x] in clipboardBoxes:
                     spr[x].click()
                 elif spr[x] in counters:
+                    timer.deactivate()
                     newCursor = Cursor(spr[x])
                     cursor.add(newCursor)
                     sprites.add(newCursor)
@@ -1172,6 +1178,7 @@ while True:
                     cursor.sprite.delete_number()
                     update_needed = True
                 if event.key == K_RETURN or event.key == K_KP_ENTER:
+                    cursor.sprite.attached_to.validate()
                     cursor.sprite.kill()
                     update_needed = True
 
