@@ -415,9 +415,9 @@ class Dragger(pygame.sprite.Sprite):
         self.image = self.graphics[self.status]
 
     def update(self, dir_dragged: str = 'none') -> None:
-        if dir_dragged == 'up':
+        if dir_dragged == 'up' and self.attached_to.num < self.attached_to.max:
             self.attached_to.num += 1
-        elif dir_dragged == 'down':
+        elif dir_dragged == 'down' and self.attached_to.num > 1:
             self.attached_to.num -= 1
         if dir_dragged != 'none':
             self.animate()
@@ -934,7 +934,7 @@ def sprites_clicked(mouse_pos: tuple, mouse_buttons: tuple) -> None:
     try:
         unclicked = 0
         if cursor.sprites():
-            cursor.attached_to.validate()
+            cursor.sprite.attached_to.validate()
             cursor.sprite.kill()
         for x in range(0, len(sprites.sprites())):
             spr = sprites.sprites()
