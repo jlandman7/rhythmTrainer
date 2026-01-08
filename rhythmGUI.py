@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
-import pygame, sys
+import pygame
+from sys import exit
 from pygame.locals import *
 from matrixGen3 import data, cores, trivials
-import time
+from time import time
 
 ### display init ---------------------------------------------
 pygame.init()
@@ -555,7 +556,7 @@ class Timer:
             # initialize
             self.duration = 60 / bpm * 1000
             self.sub_duration = self.duration / subdivs
-            self.start_time = time.time() * 1000
+            self.start_time = time() * 1000
             self.sub_iterator = 0
 
             if buttons.sprites()[4].status == 0:
@@ -569,7 +570,7 @@ class Timer:
         self.AV = False
 
     def update(self):
-        current_time = time.time() * 1000
+        current_time = time() * 1000
         elapsed =  (current_time - self.start_time)
         if elapsed - (self.sub_duration * self.sub_iterator) >= self.sub_duration:
             self.subdivision()
@@ -607,6 +608,8 @@ class SoundChanger(pygame.sprite.Sprite):
                             hit_number += 1
                     self.assocRhythm.decoupled_sounds[hit_number] = octant
                     self.assocRhythm.update_image()
+                    buttons.sprites()[6].click() # refresh mixer
+                    buttons.sprites()[6].click()
                 
             else:
                 if self.assocRhythm in selectedRhythms:
@@ -1182,7 +1185,7 @@ while True:
 
         if event.type == QUIT:
             pygame.quit()
-            sys.exit()
+            exit()
 
         if event.type == KEYDOWN:
             if mode == 'sandbox':
